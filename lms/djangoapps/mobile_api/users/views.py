@@ -3,6 +3,8 @@ Views for user API
 """
 
 
+import logging
+
 from completion.exceptions import UnavailableCompletionData
 from completion.utilities import get_key_to_last_completed_block
 from django.contrib.auth.models import User  # lint-amnesty, pylint: disable=imported-auth-user
@@ -37,6 +39,8 @@ from xmodule.modulestore.exceptions import ItemNotFoundError  # lint-amnesty, py
 from .. import errors
 from ..decorators import mobile_course_access, mobile_view
 from .serializers import CourseEnrollmentSerializer, CourseEnrollmentSerializerv05, UserSerializer
+
+log = logging.getLogger(__name__)
 
 
 @mobile_view(is_user=True)
@@ -179,6 +183,7 @@ class UserCourseStatus(views.APIView):
         try:
             descriptor = modulestore().get_item(module_key)
         except ItemNotFoundError:
+            log.error(f"{errors.ERROR_INVALID_MODULE_ID} %s", module_key)
             return Response(errors.ERROR_INVALID_MODULE_ID, status=400)
         block = get_block_for_descriptor(
             request.user, request, descriptor, field_data_cache, course.id, course=course
@@ -229,12 +234,14 @@ class UserCourseStatus(views.APIView):
         if modification_date_string:
             modification_date = dateparse.parse_datetime(modification_date_string)
             if not modification_date or not modification_date.tzinfo:
+                log.error(f"{errors.ERROR_INVALID_MODIFICATION_DATE} %s", modification_date_string)
                 return Response(errors.ERROR_INVALID_MODIFICATION_DATE, status=400)
 
         if module_id:
             try:
                 module_key = UsageKey.from_string(module_id)
             except InvalidKeyError:
+                log.error(f"{errors.ERROR_INVALID_MODULE_ID} %s", module_id)
                 return Response(errors.ERROR_INVALID_MODULE_ID, status=400)
 
             return self._update_last_visited_module_id(request, course, module_key, modification_date)

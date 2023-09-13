@@ -1971,6 +1971,13 @@ class CommentViewSetListTest(DiscussionAPIViewTestMixin, ModuleStoreTestCase, Pr
             "anonymous_to_peers": False,
             "last_edit": None,
             "edit_by_label": None,
+            "profile_image": {
+                "has_image": False,
+                "image_url_full": "http://testserver/static/default_500.png",
+                "image_url_large": "http://testserver/static/default_120.png",
+                "image_url_medium": "http://testserver/static/default_50.png",
+                "image_url_small": "http://testserver/static/default_30.png",
+            },
         }
         response_data.update(overrides or {})
         return response_data
@@ -2396,6 +2403,13 @@ class CommentViewSetCreateTest(DiscussionAPIViewTestMixin, ModuleStoreTestCase):
             "anonymous_to_peers": False,
             "last_edit": None,
             "edit_by_label": None,
+            "profile_image": {
+                "has_image": False,
+                "image_url_full": "http://testserver/static/default_500.png",
+                "image_url_large": "http://testserver/static/default_120.png",
+                "image_url_medium": "http://testserver/static/default_50.png",
+                "image_url_small": "http://testserver/static/default_30.png",
+            },
         }
         response = self.client.post(
             self.url,
@@ -2488,6 +2502,13 @@ class CommentViewSetPartialUpdateTest(DiscussionAPIViewTestMixin, ModuleStoreTes
             "anonymous_to_peers": False,
             "last_edit": None,
             "edit_by_label": None,
+            "profile_image": {
+                "has_image": False,
+                "image_url_full": "http://testserver/static/default_500.png",
+                "image_url_large": "http://testserver/static/default_120.png",
+                "image_url_medium": "http://testserver/static/default_50.png",
+                "image_url_small": "http://testserver/static/default_30.png",
+            },
         }
         response_data.update(overrides or {})
         return response_data
@@ -2678,6 +2699,13 @@ class CommentViewSetRetrieveTest(DiscussionAPIViewTestMixin, ModuleStoreTestCase
             "anonymous_to_peers": False,
             "last_edit": None,
             "edit_by_label": None,
+            "profile_image": {
+                "has_image": False,
+                "image_url_full": "http://testserver/static/default_500.png",
+                "image_url_large": "http://testserver/static/default_120.png",
+                "image_url_medium": "http://testserver/static/default_50.png",
+                "image_url_small": "http://testserver/static/default_30.png",
+            },
         }
 
         response = self.client.get(self.url)

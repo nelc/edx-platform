@@ -23,8 +23,9 @@ class TestRecommendationsBase(APITestCase):
 
     def setUp(self):
         super().setUp()
-        self.user = UserFactory()
-        self.client.login(username=self.user.username, password="test")
+        self.TEST_PASSWORD = 'password'
+        self.user = UserFactory(password=self.TEST_PASSWORD)
+        self.client.login(username=self.user.username, password=self.TEST_PASSWORD)
         self.recommended_courses = [
             "MITx+6.00.1x",
             "IBM+PY0101EN",

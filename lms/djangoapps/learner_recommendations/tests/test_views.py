@@ -23,7 +23,7 @@ class TestRecommendationsBase(APITestCase):
 
     def setUp(self):
         super().setUp()
-        self.TEST_PASSWORD = 'password'
+        self.TEST_PASSWORD = 'Password1234'
         self.user = UserFactory(password=self.TEST_PASSWORD)
         self.client.login(username=self.user.username, password=self.TEST_PASSWORD)
         self.recommended_courses = [

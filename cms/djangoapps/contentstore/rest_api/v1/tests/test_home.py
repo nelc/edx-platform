@@ -5,11 +5,15 @@ import ddt
 import json
 from django.conf import settings
 from django.urls import reverse
-from edx_toggles.toggles.testutils import override_waffle_switch
+from edx_toggles.toggles.testutils import (
+    override_waffle_switch,
+    override_waffle_flag,
+)
 from rest_framework import status
 
 from cms.djangoapps.contentstore.tests.utils import CourseTestCase
 from cms.djangoapps.contentstore.views.course import ENABLE_GLOBAL_STAFF_OPTIMIZATION
+from cms.djangoapps.contentstore.toggles import ENABLE_TAGGING_TAXONOMY_LIST_PAGE
 from openedx.core.djangoapps.content.course_overviews.tests.factories import CourseOverviewFactory
 from xmodule.modulestore.tests.django_utils import TEST_DATA_SPLIT_MODULESTORE
 from xmodule.modulestore.tests.factories import CourseFactory
@@ -52,7 +56,9 @@ class HomePageViewTest(CourseTestCase):
             "in_process_course_actions": [],
             "libraries": [],
             "libraries_enabled": True,
+            "taxonomies_enabled": False,
             "library_authoring_mfe_url": settings.LIBRARY_AUTHORING_MICROFRONTEND_URL,
+            "taxonomy_list_mfe_url": None,
             "optimization_enabled": False,
             "redirect_to_library_authoring_mfe": False,
             "request_course_creator_url": "/request_course_creator",
@@ -90,3 +96,12 @@ class HomePageViewTest(CourseTestCase):
         response = self.client.get(self.url)
         self.assertEqual(len(response.data['courses']), 0)
         self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+    @override_waffle_flag(ENABLE_TAGGING_TAXONOMY_LIST_PAGE, True)
+    def test_taxonomy_list_link(self):
+        response = self.client.get(self.url)
+        self.assertTrue(response.data['taxonomies_enabled'])
+        self.assertEqual(
+            response.data['taxonomy_list_mfe_url'],
+            f'{settings.COURSE_AUTHORING_MICROFRONTEND_URL}/taxonomy-list'
+        )

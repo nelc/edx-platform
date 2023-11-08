@@ -94,6 +94,7 @@ from ..utils import (
     get_home_context,
     get_lms_link_for_item,
     get_proctored_exam_settings_url,
+    get_taxonomy_tags_widget_url,
     get_course_rerun_context,
     initialize_permissions,
     remove_all_instructors,
@@ -686,6 +687,7 @@ def course_index(request, course_key):
             'mfe_proctored_exam_settings_url': get_proctored_exam_settings_url(course_block.id),
             'advance_settings_url': reverse_course_url('advanced_settings_handler', course_block.id),
             'proctoring_errors': proctoring_errors,
+            'taxonomy_tags_widget_url': get_taxonomy_tags_widget_url(course_block.id),
         })
 
 

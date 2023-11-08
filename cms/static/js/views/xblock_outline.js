@@ -109,7 +109,8 @@ function($, _, gettext, BaseView, ViewUtils, XBlockViewUtils, XBlockStringFieldE
                 includesChildren: this.shouldRenderChildren(),
                 hasExplicitStaffLock: this.model.get('has_explicit_staff_lock'),
                 staffOnlyMessage: this.model.get('staff_only_message'),
-                course: course
+                course: course,
+                useTaggingTaxonomyListPage: this.model.get("use_tagging_taxonomy_list_page"), // ENABLE_TAGGING_TAXONOMY_LIST_PAGE waffle flag
             };
         },
 

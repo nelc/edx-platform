@@ -187,6 +187,17 @@ if (is_proctored_exam) {
                         </a>
                     </li>
                 <% } %>
+
+                <% if (xblockInfo.isVertical() && typeof useTaggingTaxonomyListPage !== "undefined" && useTaggingTaxonomyListPage) { %>
+                    <li class="action-item">
+                        <a href="#" data-tooltip="<%- gettext('Manage Tags') %>" class="manage-tags-button action-button">
+                            <span class="icon fa fa-tag" aria-hidden="true"></span>
+                            <span>?</span>
+                            <span class="sr action-button-text"><%- gettext('Manage Tags') %></span>
+                        </a>
+                    </li>
+                <% } %>
+
                 <% if (xblockInfo.isDraggable()) { %>
                 <li class="action-item action-drag">
                     <span data-tooltip="<%- gettext('Drag to reorder') %>"

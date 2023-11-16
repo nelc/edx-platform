@@ -17,6 +17,7 @@ from django.views.decorators.http import require_http_methods
 from edx_django_utils.plugins import pluggable_override
 from openedx_events.content_authoring.data import DuplicatedXBlockData
 from openedx_events.content_authoring.signals import XBLOCK_DUPLICATED
+from openedx_tagging.core.tagging import api as tagging_api
 from edx_proctoring.api import (
     does_backend_support_onboarding,
     get_exam_by_content_id,
@@ -46,6 +47,7 @@ from common.djangoapps.xblock_django.user_service import DjangoXBlockUserService
 from openedx.core.djangoapps.bookmarks import api as bookmarks_api
 from openedx.core.djangoapps.discussions.models import DiscussionsConfiguration
 from openedx.core.lib.gating import api as gating_api
+from openedx.core.lib.cache_utils import request_cached
 from openedx.core.lib.xblock_utils import hash_resource, request_token, wrap_xblock, wrap_xblock_aside
 from openedx.core.toggles import ENTRANCE_EXAMS
 from xmodule.course_block import DEFAULT_START_DATE  # lint-amnesty, pylint: disable=wrong-import-order
@@ -1385,6 +1387,7 @@ def create_xblock_info(xblock, data=None, metadata=None, include_ancestor_info=F
             # If the ENABLE_TAGGING_TAXONOMY_LIST_PAGE feature flag is enabled, we show the "Manage Tags" options
             if use_tagging_taxonomy_list_page():
                 xblock_info["use_tagging_taxonomy_list_page"] = True
+                xblock_info["tag_counts_by_unit"] = _get_course_unit_tags(xblock.location.context_key)
 
         xblock_info['user_partition_info'] = get_visibility_partition_info(xblock, course=course)
 
@@ -1629,3 +1632,16 @@ def _xblock_type_and_display_name(xblock):
     return _('{section_or_subsection} "{display_name}"').format(
         section_or_subsection=xblock_type_display_name(xblock),
         display_name=xblock.display_name_with_default)
+
+
+@request_cached()
+def _get_course_unit_tags(course_key) -> dict:
+    """
+    Get the count of tags that are applied to each unit (vertical) in this course, as a dict.
+    """
+    if not course_key.is_course:
+        return {}  # Unsupported key type, e.g. a library
+    # Create a pattern to match the IDs of the units, e.g. "block-v1:org+course+run+type@vertical+block@*"
+    vertical_key = course_key.make_usage_key('vertical', 'x')
+    unit_key_pattern = str(vertical_key).rsplit("@", 1)[0] + "@*"
+    return tagging_api.get_object_tag_counts(unit_key_pattern)

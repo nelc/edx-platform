@@ -7,12 +7,13 @@ from lms.lib.utils import is_unit
 from openedx.core.djangolib.js_utils import (
     dump_js_escaped_json, js_escaped_string
 )
-from cms.djangoapps.contentstore.toggles import use_new_text_editor, use_new_problem_editor, use_new_video_editor
+from cms.djangoapps.contentstore.toggles import use_new_text_editor, use_new_problem_editor, use_new_video_editor, use_tagging_taxonomy_list_page
 %>
 <%
 use_new_editor_text = use_new_text_editor()
 use_new_editor_video = use_new_video_editor()
 use_new_editor_problem = use_new_problem_editor()
+use_tagging = use_tagging_taxonomy_list_page()
 xblock_url = xblock_studio_url(xblock)
 show_inline = xblock.has_children and not xblock_url
 section_class = "level-nesting" if show_inline else "level-element"
@@ -117,6 +118,15 @@ block_is_unit = is_unit(xblock)
                                         </span>
                                         <span class="sr">${_("Move")}</span>
                                     </button>
+                                </li>
+                            % endif
+                            % if use_tagging:
+                                <li class="action-item action-tag">
+                                    <a class="tags-button action-button" href="#" role="button">
+                                        <span class="icon fa fa-tag" aria-hidden="true"></span>
+                                        <span>?</span>
+                                        <span class="sr action-button-text">${_("Manage tags")}</span>
+                                    </a>
                                 </li>
                             % endif
                         % endif

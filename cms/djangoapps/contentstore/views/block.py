@@ -68,7 +68,8 @@ from ..utils import (
     get_visibility_partition_info,
     has_children_visible_to_specific_partition_groups,
     is_currently_visible_to_students,
-    is_self_paced
+    is_self_paced,
+    get_taxonomy_tags_widget_url,
 )
 from .helpers import (
     create_xblock,
@@ -1141,7 +1142,7 @@ def _get_gating_info(course, xblock):
 @pluggable_override('OVERRIDE_CREATE_XBLOCK_INFO')
 def create_xblock_info(xblock, data=None, metadata=None, include_ancestor_info=False, include_child_info=False,  # lint-amnesty, pylint: disable=too-many-statements
                        course_outline=False, include_children_predicate=NEVER, parent_xblock=None, graders=None,
-                       user=None, course=None, is_concise=False):
+                       user=None, course=None, is_concise=False, tags=None):
     """
     Creates the information needed for client-side XBlockInfo.
 
@@ -1362,6 +1363,10 @@ def create_xblock_info(xblock, data=None, metadata=None, include_ancestor_info=F
             xblock_info['ancestor_has_staff_lock'] = ancestor_has_staff_lock(xblock, parent_xblock)
         else:
             xblock_info['ancestor_has_staff_lock'] = False
+        if tags is not None:
+            xblock_info["tags"] = tags
+        if use_tagging_taxonomy_list_page():
+            xblock_info["taxonomy_tags_widget_url"] = get_taxonomy_tags_widget_url()
 
         if course_outline:
             if xblock_info['has_explicit_staff_lock']:

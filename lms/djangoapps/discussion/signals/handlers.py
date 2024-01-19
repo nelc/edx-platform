@@ -11,6 +11,7 @@ from opaque_keys.edx.keys import CourseKey
 from opaque_keys.edx.locator import LibraryLocator
 
 from lms.djangoapps.discussion.rest_api.discussions_notifications import DiscussionNotificationSender
+from lms.djangoapps.discussion.toggles import ENABLE_REPORTED_CONTENT_NOTIFICATIONS
 from lms.djangoapps.discussion.toggles_utils import reported_content_email_notification_enabled
 from xmodule.modulestore.django import SignalHandler, modulestore
 
@@ -100,6 +101,8 @@ def send_reported_content_notification(sender, user, post, **kwargs):
     Sends notification for reported content.
     """
     course_key = CourseKey.from_string(post.course_id)
+    if not ENABLE_REPORTED_CONTENT_NOTIFICATIONS.is_enabled(course_key):
+        return
     course = modulestore().get_course(course_key)
     DiscussionNotificationSender(post, course, user).send_reported_content_notification()
 

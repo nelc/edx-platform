@@ -5,18 +5,24 @@ Unit tests for the DiscussionNotificationSender class
 import unittest
 from unittest.mock import MagicMock, patch
 
+import pytest
+from edx_toggles.toggles.testutils import override_waffle_flag
+
 from lms.djangoapps.discussion.rest_api.discussions_notifications import DiscussionNotificationSender
+from lms.djangoapps.discussion.toggles import ENABLE_REPORTED_CONTENT_NOTIFICATIONS
 
 
 @patch('lms.djangoapps.discussion.rest_api.discussions_notifications.DiscussionNotificationSender'
        '._create_cohort_course_audience', return_value={})
 @patch('lms.djangoapps.discussion.rest_api.discussions_notifications.DiscussionNotificationSender'
        '._send_course_wide_notification')
+@pytest.mark.django_db
 class TestDiscussionNotificationSender(unittest.TestCase):
     """
     Tests for the DiscussionNotificationSender class
     """
 
+    @override_waffle_flag(ENABLE_REPORTED_CONTENT_NOTIFICATIONS, True)
     def setUp(self):
         self.thread = MagicMock()
         self.course = MagicMock()

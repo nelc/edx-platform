@@ -113,6 +113,23 @@ COURSE_NOTIFICATION_TYPES = {
         'email_template': '',
         'filters': [FILTER_AUDIT_EXPIRED_USERS_WITH_NO_ROLE]
     },
+    'endorsed_post': {
+        'notification_app': 'discussion',
+        'name': 'endorsed_post',
+        'is_core': False,
+        'info': '',
+        'web': True,
+        'email': True,
+        'push': True,
+        'non_editable': [],
+        'content_template': _('<{p}><{strong}>{username}</{strong}> response has been endorsed in your post <{strong}>{post_title}</{strong}></{p}>'),
+        'content_context': {
+            'post_title': 'Post title',
+            'username': 'Post author name',
+        },
+        'email_template': '',
+        'filters': [FILTER_AUDIT_EXPIRED_USERS_WITH_NO_ROLE]
+    },
 }
 
 COURSE_NOTIFICATION_APPS = {

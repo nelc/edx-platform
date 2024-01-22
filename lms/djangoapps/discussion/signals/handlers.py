@@ -72,9 +72,6 @@ def send_reported_content_email_notification(sender, user, post, **kwargs):
     """
     Sends email notification for reported content.
     """
-    course_key = CourseKey.from_string(post.course_id)
-    if not reported_content_email_notification_enabled(course_key):
-        return
     current_site = get_current_site()
     if current_site is None:
         log.info('Discussion: No current site, not sending notification about post: %s.', post.id)

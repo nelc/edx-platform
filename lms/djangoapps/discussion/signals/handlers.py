@@ -12,7 +12,6 @@ from opaque_keys.edx.locator import LibraryLocator
 
 from lms.djangoapps.discussion.rest_api.discussions_notifications import DiscussionNotificationSender
 from lms.djangoapps.discussion.toggles import ENABLE_REPORTED_CONTENT_NOTIFICATIONS
-from lms.djangoapps.discussion.toggles_utils import reported_content_email_notification_enabled
 from xmodule.modulestore.django import SignalHandler, modulestore
 
 from lms.djangoapps.discussion import tasks

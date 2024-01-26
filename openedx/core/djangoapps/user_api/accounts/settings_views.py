@@ -272,12 +272,14 @@ def _get_extended_profile_fields():
         "specialty": _("Specialty")
     }
     request = theming_helpers.get_current_request()
-    extended_profile_fields_translations = configuration_helpers.get_value(
-        'extended_profile_fields_translations',
-        {},
-    )
-    translations = extended_profile_fields_translations.get(request.LANGUAGE_CODE, {})
-    field_labels_map.update(translations)
+
+    if request:
+        extended_profile_fields_translations = configuration_helpers.get_value(
+            'extended_profile_fields_translations',
+            {},
+        )
+        translations = extended_profile_fields_translations.get(request.LANGUAGE_CODE, {})
+        field_labels_map.update(translations)
 
     extended_profile_field_names = configuration_helpers.get_value('extended_profile_fields', [])
     for field_to_exclude in fields_already_showing:

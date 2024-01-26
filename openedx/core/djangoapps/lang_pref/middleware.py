@@ -57,8 +57,8 @@ class LanguagePreferenceMiddleware(MiddlewareMixin):
             if LANGUAGE_SESSION_KEY in request.session and request.session[LANGUAGE_SESSION_KEY] != cookie_lang:
                 del request.session[LANGUAGE_SESSION_KEY]
 
-        # Apply language specified in SiteConfiguration, ignoring user preferences.
-        if (language := get_value('LANGUAGE_CODE')) and (getattr(settings, "IGNORE_USER_LANGUAGE_COOKIE", True)):
+        # Apply language specified in SiteConfiguration, if there are not user preferences.
+        if (language := get_value('LANGUAGE_CODE')) and (not request.COOKIES.get(settings.LANGUAGE_COOKIE_NAME, None)):
             request.COOKIES[settings.LANGUAGE_COOKIE_NAME] = language
 
     def process_response(self, request, response):  # lint-amnesty, pylint: disable=missing-function-docstring

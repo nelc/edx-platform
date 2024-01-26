@@ -11,7 +11,6 @@ from django.core.management.base import BaseCommand, CommandError
 
 from openedx.core.djangoapps.user_api.accounts.utils import handle_retirement_cancellation
 from openedx.core.djangoapps.user_api.models import UserRetirementStatus
-from openedx.core.djangoapps.user_authn.utils import generate_password
 
 LOGGER = logging.getLogger(__name__)
 

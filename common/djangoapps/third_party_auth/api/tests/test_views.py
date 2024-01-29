@@ -38,7 +38,10 @@ PASSWORD = "edx"
 
 def get_mapping_data_by_usernames(usernames):
     """ Generate mapping data used in response """
-    return [{'username': username, 'remote_id': 'remote_' + username} for username in usernames]
+    return [
+        {"username": username, "remote_id": "remote_" + username, "email": f"{username}@example.com"}
+        for username in usernames
+    ]
 
 
 class TpaAPITestCase(ThirdPartyAuthTestMixin, APITestCase):

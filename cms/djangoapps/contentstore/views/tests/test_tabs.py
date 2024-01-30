@@ -191,7 +191,7 @@ class PrimitiveTabEdit(ModuleStoreTestCase):
             tabs.primitive_delete(course, 6)
 
         assert course.tabs[1] != {'type': 'dates', 'name': 'Dates'}
-        tabs.primitive_delete(course, -2)
+        tabs.primitive_delete(course, len(course.tabs) - 2)
         assert {'type': 'progress'} not in course.tabs
         # Check that dates has shifted up
         assert course.tabs[1] == {'type': 'dates', 'name': 'Dates'}

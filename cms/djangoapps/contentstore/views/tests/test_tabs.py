@@ -194,7 +194,7 @@ class PrimitiveTabEdit(ModuleStoreTestCase):
         tabs.primitive_delete(course, len(course.tabs) - 2)
         assert {'type': 'progress'} not in course.tabs
         # Check that dates has shifted up
-        assert course.tabs[1] == {'type': 'dates', 'name': 'Dates'}
+        assert course.tabs[-1] == {'type': 'dates', 'name': 'Dates'}
 
     def test_insert(self):
         """Test primitive tab insertion."""

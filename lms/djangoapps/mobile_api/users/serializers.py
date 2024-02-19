@@ -180,3 +180,4 @@ class ModeSerializer(serializers.Serializer):  # pylint: disable=abstract-method
     sku = serializers.CharField()
     android_sku = serializers.CharField()
     ios_sku = serializers.CharField()
+    min_price = serializers.IntegerField()

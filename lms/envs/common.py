@@ -1613,7 +1613,7 @@ MODULESTORE = {
                     'DOC_STORE_CONFIG': DOC_STORE_CONFIG,
                     'OPTIONS': {
                         'default_class': 'xmodule.hidden_block.HiddenBlock',
-                        'fs_root': DATA_DIR,
+                        'fs_root': lambda settings: settings.DATA_DIR,
                         'render_template': 'common.djangoapps.edxmako.shortcuts.render_to_string',
                     }
                 },
@@ -1623,7 +1623,7 @@ MODULESTORE = {
                     'DOC_STORE_CONFIG': DOC_STORE_CONFIG,
                     'OPTIONS': {
                         'default_class': 'xmodule.hidden_block.HiddenBlock',
-                        'fs_root': DATA_DIR,
+                        'fs_root': lambda settings: settings.DATA_DIR,
                         'render_template': 'common.djangoapps.edxmako.shortcuts.render_to_string',
                     }
                 }
@@ -1631,6 +1631,7 @@ MODULESTORE = {
         }
     }
 }
+
 
 DATABASES = {
     # edxapp's edxapp-migrate scripts and the edxapp_migrate play
@@ -1640,7 +1641,7 @@ DATABASES = {
         'ATOMIC_REQUESTS': True,
         'CONN_MAX_AGE': 0,
         'ENGINE': 'django.db.backends.mysql',
-        'HOST': 'localhost',
+        'HOST': '127.0.0.1',
         'NAME': 'edxapp',
         'OPTIONS': {},
         'PASSWORD': 'password',
@@ -1650,7 +1651,7 @@ DATABASES = {
     'read_replica': {
         'CONN_MAX_AGE': 0,
         'ENGINE': 'django.db.backends.mysql',
-        'HOST': 'localhost',
+        'HOST': '127.0.0.1',
         'NAME': 'edxapp',
         'OPTIONS': {},
         'PASSWORD': 'password',
@@ -1660,7 +1661,7 @@ DATABASES = {
     'student_module_history': {
         'CONN_MAX_AGE': 0,
         'ENGINE': 'django.db.backends.mysql',
-        'HOST': 'localhost',
+        'HOST': '127.0.0.1',
         'NAME': 'edxapp_csmh',
         'OPTIONS': {},
         'PASSWORD': 'password',

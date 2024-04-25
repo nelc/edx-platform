@@ -776,6 +776,8 @@ openedx-filters==1.2.0
     # via
     #   -r requirements/edx/base.in
     #   lti-consumer-xblock
+openedx-learning==0.9.2
+    # via -r requirements/edx/base.in
 optimizely-sdk==4.1.1
     # via -r requirements/edx/base.in
 ora2==5.0.0

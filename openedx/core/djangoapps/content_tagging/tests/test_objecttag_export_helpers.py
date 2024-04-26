@@ -5,6 +5,7 @@ import time
 from unittest.mock import patch
 
 from openedx.core.djangoapps.content_libraries import api as library_api
+from openedx.core.lib.blockstore_api import create_collection
 from xmodule.modulestore.tests.django_utils import TEST_DATA_SPLIT_MODULESTORE, ModuleStoreTestCase
 from xmodule.modulestore.tests.factories import BlockFactory, CourseFactory
 
@@ -338,8 +339,11 @@ class TaggedCourseMixin(TestGetAllObjectTagsMixin, ModuleStoreTestCase):  # type
             (untagged_vertical, 2),
         ]
 
+        collection = create_collection("Test library collection")
+
         # Create a library
         self.library = library_api.create_library(
+            collection.uuid,
             self.orgA,
             f"lib_{self.block_suffix}",
             "Test Library",

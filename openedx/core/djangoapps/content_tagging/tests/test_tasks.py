@@ -14,6 +14,7 @@ from organizations.models import Organization
 from common.djangoapps.student.tests.factories import UserFactory
 from openedx.core.djangolib.testing.utils import skip_unless_cms
 from xmodule.modulestore.tests.django_utils import TEST_DATA_SPLIT_MODULESTORE, ModuleStoreTestCase
+from openedx.core.lib.blockstore_api import create_collection
 from openedx.core.djangoapps.content_libraries.api import create_library, create_library_block, delete_library_block
 from openedx.core.lib.blockstore_api.tests.base import BlockstoreAppTestMixin
 
@@ -253,8 +254,10 @@ class TestAutoTagging(  # type: ignore[misc]
         assert self._check_tag(usage_key_str, LANGUAGE_TAXONOMY_ID, None)
 
     def test_create_delete_library_block(self):
-        # Create library
+        # Create collection and library
+        collection = create_collection("Test library collection")
         library = create_library(
+            collection_uuid=collection.uuid,
             org=self.orgA,
             slug="lib_a",
             title="Library Org A",
@@ -280,8 +283,10 @@ class TestAutoTagging(  # type: ignore[misc]
 
     @override_waffle_flag(CONTENT_TAGGING_AUTO, active=False)
     def test_waffle_disabled_create_delete_library_block(self):
-        # Create library
+        # Create collection and library
+        collection = create_collection("Test library collection 2")
         library = create_library(
+            collection_uuid=collection.uuid,
             org=self.orgA,
             slug="lib_a2",
             title="Library Org A 2",

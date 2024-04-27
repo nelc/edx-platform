@@ -5,6 +5,7 @@ import time
 from unittest.mock import patch
 
 from openedx.core.djangoapps.content_libraries import api as library_api
+from openedx.core.djangoapps.content_libraries.tests.base import BlockstoreAppTestMixin
 from openedx.core.lib.blockstore_api import create_collection
 from xmodule.modulestore.tests.django_utils import TEST_DATA_SPLIT_MODULESTORE, ModuleStoreTestCase
 from xmodule.modulestore.tests.factories import BlockFactory, CourseFactory
@@ -194,7 +195,7 @@ class TestGetAllObjectTagsMixin:
         }
 
 
-class TaggedCourseMixin(TestGetAllObjectTagsMixin, ModuleStoreTestCase):  # type: ignore[misc]
+class TaggedCourseMixin(TestGetAllObjectTagsMixin, BlockstoreAppTestMixin, ModuleStoreTestCase):  # type: ignore[misc]
     """
     Mixin with a course structure and taxonomies
     """

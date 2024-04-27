@@ -4,6 +4,7 @@ Content Tagging APIs
 from __future__ import annotations
 import io
 
+import datetime
 from itertools import groupby
 import csv
 from typing import Iterator
@@ -11,7 +12,6 @@ from opaque_keys.edx.keys import UsageKey
 
 import openedx_tagging.core.tagging.api as oel_tagging
 from django.db.models import Exists, OuterRef, Q, QuerySet
-from django.utils.timezone import now
 from opaque_keys.edx.keys import CourseKey
 from opaque_keys.edx.locator import LibraryLocatorV2
 from openedx_tagging.core.tagging.models import ObjectTag, Taxonomy
@@ -302,7 +302,7 @@ def set_exported_object_tags(
             taxonomy_export_id=str(taxonomy_export_id),
         )
         CONTENT_OBJECT_TAGS_CHANGED.send_event(
-            time=now(),
+            time=datetime.datetime.now(datetime.timezone.utc),
             content_object=ContentObjectData(object_id=content_key_str)
         )
 
@@ -400,9 +400,10 @@ def tag_object(
             tags=tags,
         )
         CONTENT_OBJECT_TAGS_CHANGED.send_event(
-            time=now(),
+            time=datetime.datetime.now(datetime.timezone.utc),
             content_object=ContentObjectData(object_id=object_id)
         )
+
 
 # Expose the oel_tagging APIs
 

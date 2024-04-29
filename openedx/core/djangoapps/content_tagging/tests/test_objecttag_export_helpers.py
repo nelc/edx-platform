@@ -365,7 +365,7 @@ class TaggedCourseMixin(TestGetAllObjectTagsMixin, BlockstoreAppTestMixin, Modul
             f"problem1_{self.block_suffix}",
         )
         tagged_problem = TaggedContent(
-            display_name="Blank Problem",
+            display_name="Blank Advanced Problem",
             block_id=f"lb:orgA:lib_{self.block_suffix}:problem:problem1_{self.block_suffix}",
             category="problem",
             children=[],
@@ -380,7 +380,7 @@ class TaggedCourseMixin(TestGetAllObjectTagsMixin, BlockstoreAppTestMixin, Modul
             f"problem2_{self.block_suffix}",
         )
         untagged_problem = TaggedContent(
-            display_name="Blank Problem",
+            display_name="Blank Advanced Problem",
             block_id=f"lb:orgA:lib_{self.block_suffix}:problem:problem2_{self.block_suffix}",
             category="problem",
             children=[],
@@ -405,16 +405,16 @@ class TaggedCourseMixin(TestGetAllObjectTagsMixin, BlockstoreAppTestMixin, Modul
 
         assert self.expected_library_tagged_xblock.children is not None  # type guard
         # The children are sorted by add order
+        self.expected_library_tagged_xblock.children.append(tagged_library_html)
         self.expected_library_tagged_xblock.children.append(tagged_problem)
         self.expected_library_tagged_xblock.children.append(untagged_problem)
-        self.expected_library_tagged_xblock.children.append(tagged_library_html)
 
         self.all_library_object_tags, _ = api.get_all_object_tags(self.library.key)
         self.expected_library_tagged_content_list = [
             (self.expected_library_tagged_xblock, 0),
+            (tagged_library_html, 1),
             (tagged_problem, 1),
             (untagged_problem, 1),
-            (tagged_library_html, 1),
         ]
 
         self.expected_csv = (

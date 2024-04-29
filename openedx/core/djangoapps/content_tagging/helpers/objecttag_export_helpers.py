@@ -86,11 +86,7 @@ def _get_library_tagged_object_and_children(
         children=None,
     )
 
-    library_components = library_api.get_library_components(library_key)
-    children = [
-        library_api.LibraryXBlockMetadata.from_component(library_key, component)
-        for component in library_components
-    ]
+    children = library_api.get_library_blocks(library_key)
 
     return tagged_library, children
 

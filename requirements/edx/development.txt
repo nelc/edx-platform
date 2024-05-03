@@ -1035,6 +1035,9 @@ openedx-filters==1.2.0
     # via
     #   -r requirements/edx/testing.txt
     #   lti-consumer-xblock
+openedx-learning==0.9.2
+    # via
+    #   -r requirements/edx/testing.txt
 optimizely-sdk==4.1.1
     # via -r requirements/edx/testing.txt
 ora2==5.0.0

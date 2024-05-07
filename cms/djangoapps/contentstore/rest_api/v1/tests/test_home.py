@@ -11,6 +11,7 @@ from rest_framework import status
 from cms.djangoapps.contentstore.tests.utils import CourseTestCase
 from cms.djangoapps.contentstore.views.course import ENABLE_GLOBAL_STAFF_OPTIMIZATION
 from openedx.core.djangoapps.content.course_overviews.tests.factories import CourseOverviewFactory
+from xmodule.modulestore.tests.django_utils import TEST_DATA_SPLIT_MODULESTORE
 from xmodule.modulestore.tests.factories import CourseFactory
 
 
@@ -19,6 +20,7 @@ class HomePageViewTest(CourseTestCase):
     """
     Tests for HomePageView.
     """
+    MODULESTORE = TEST_DATA_SPLIT_MODULESTORE
 
     def setUp(self):
         super().setUp()

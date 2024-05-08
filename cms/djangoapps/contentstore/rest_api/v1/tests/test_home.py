@@ -2,6 +2,7 @@
 Unit tests for home page view.
 """
 import ddt
+import json
 from django.conf import settings
 from django.urls import reverse
 from edx_toggles.toggles.testutils import override_waffle_switch
@@ -65,7 +66,7 @@ class HomePageViewTest(CourseTestCase):
         }
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertDictEqual(expected_response, response.data)
+        self.assertDictEqual(expected_response, json.loads(json.dumps(response.data)))
 
     @override_waffle_switch(ENABLE_GLOBAL_STAFF_OPTIMIZATION, True)
     def test_org_query_if_passed(self):

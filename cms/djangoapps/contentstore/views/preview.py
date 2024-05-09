@@ -315,6 +315,7 @@ def _studio_wrap_xblock(xblock, view, frag, context, display_name_only=False):
             'can_edit': can_edit,
             'enable_copy_paste': enable_copy_paste,
             'can_edit_visibility': context.get('can_edit_visibility', xblock.scope_ids.usage_id.context_key.is_course),
+            'course_authoring_url': settings.COURSE_AUTHORING_MICROFRONTEND_URL,
             'selected_groups_label': selected_groups_label,
             'can_add': context.get('can_add', True),
             'can_move': context.get('can_move', xblock.scope_ids.usage_id.context_key.is_course),

@@ -1375,6 +1375,7 @@ def create_xblock_info(xblock, data=None, metadata=None, include_ancestor_info=F
             xblock_info["tags"] = tags
         if use_tagging_taxonomy_list_page():
             xblock_info["taxonomy_tags_widget_url"] = get_taxonomy_tags_widget_url()
+            xblock_info["course_authoring_url"] = settings.COURSE_AUTHORING_MICROFRONTEND_URL
 
         if course_outline:
             if xblock_info['has_explicit_staff_lock']:

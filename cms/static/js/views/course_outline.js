@@ -10,10 +10,10 @@
  */
 define(['jquery', 'underscore', 'js/views/xblock_outline', 'common/js/components/utils/view_utils', 'js/views/utils/xblock_utils',
     'js/models/xblock_outline_info', 'js/views/modals/course_outline_modals', 'js/utils/drag_and_drop',
-    'js/views/utils/tagging_drawer_utils',],
+    'js/views/utils/tagging_drawer_utils', 'js/views/tag_count', 'js/models/tag_count'],
 function(
     $, _, XBlockOutlineView, ViewUtils, XBlockViewUtils,
-    XBlockOutlineInfo, CourseOutlineModalsFactory, ContentDragger, TaggingDrawerUtils
+    XBlockOutlineInfo, CourseOutlineModalsFactory, ContentDragger, TaggingDrawerUtils, TagCountView, TagCountModel
 ) {
     var CourseOutlineView = XBlockOutlineView.extend({
         // takes XBlockOutlineInfo as a model
@@ -23,7 +23,26 @@ function(
         render: function() {
             var renderResult = XBlockOutlineView.prototype.render.call(this);
             this.makeContentDraggable(this.el);
+            this.renderTagCount();
             return renderResult;
+        },
+
+        renderTagCount: function() {
+            const contentId = this.model.get('id');
+            const tagCountsByUnit = this.model.get('tag_counts_by_unit')
+            const tagsCount = tagCountsByUnit !== undefined ? tagCountsByUnit[contentId] : 0
+            var countModel = new TagCountModel({
+                content_id: contentId,
+                tags_count: tagsCount,
+                course_authoring_url: this.model.get('course_authoring_url'),
+            }, {parse: true});
+            var tagCountView = new TagCountView({el: this.$('.tag-count'), model: countModel});
+            tagCountView.setupMessageListener();
+            tagCountView.render();
+            this.$('.tag-count').click((event) => {
+                event.preventDefault();
+                this.openManageTagsDrawer();
+            });
         },
 
         shouldExpandChildren: function() {
@@ -217,10 +236,8 @@ function(
         },
 
         openManageTagsDrawer() {
-            const article = document.querySelector('[data-taxonomy-tags-widget-url]');
-            const taxonomyTagsWidgetUrl = $(article).attr('data-taxonomy-tags-widget-url');
+            const taxonomyTagsWidgetUrl = this.model.get('taxonomy_tags_widget_url');
             const contentId = this.model.get('id');
-
             TaggingDrawerUtils.openDrawer(taxonomyTagsWidgetUrl, contentId);
         },
 

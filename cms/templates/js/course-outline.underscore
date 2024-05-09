@@ -8,7 +8,7 @@ var userPartitionInfo = xblockInfo.get('user_partition_info');
 var selectedGroupsLabel = userPartitionInfo['selected_groups_label'];
 var selectedPartitionIndex = userPartitionInfo['selected_partition_index'];
 var xblockId = xblockInfo.get('id')
-var tagsCount = (xblockInfo.get('tag_counts_by_unit') || {})[xblockId] || 0;
+var tagsCount = (xblockInfo.get('tag_counts_by_block') || {})[xblockId] || 0;
 
 var statusMessages = [];
 var messageType;
@@ -190,7 +190,7 @@ if (is_proctored_exam) {
                     </li>
                 <% } %>
 
-                <% if (xblockInfo.isVertical() && typeof useTaggingTaxonomyListPage !== "undefined" && useTaggingTaxonomyListPage) { %>
+                <% if (typeof useTaggingTaxonomyListPage !== "undefined" && useTaggingTaxonomyListPage) { %>
                     <li class="action-item tag-count" data-locator="<%- xblockId %>"></li>
                 <% } %>
 

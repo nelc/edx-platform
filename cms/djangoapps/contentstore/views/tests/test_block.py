@@ -242,7 +242,7 @@ class GetItemTest(ItemTest):
         )
 
     @override_waffle_flag(ENABLE_TAGGING_TAXONOMY_LIST_PAGE, True)
-    @patch("cms.djangoapps.contentstore.xblock_storage_handlers.xblock_helpers.get_object_tag_counts")
+    @patch("cms.djangoapps.contentstore.views.block.get_object_tag_counts")
     def test_tag_count_in_container_fragment(self, mock_get_object_tag_counts):
         root_usage_key = self._create_vertical()
 

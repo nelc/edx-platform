@@ -19,6 +19,9 @@ log = logging.getLogger(__name__)
 # A list of registered access roles.
 REGISTERED_ACCESS_ROLES = {}
 
+# A mapping of roles to the roles that they inherit permissions from.
+ACCESS_ROLES_INHERITANCE = {}
+
 
 def register_access_role(cls):
     """
@@ -33,6 +36,10 @@ def register_access_role(cls):
         REGISTERED_ACCESS_ROLES[role_name] = cls
     except AttributeError:
         log.exception("Unable to register Access Role with attribute 'ROLE'.")
+
+    if base_role := getattr(cls, "BASE_ROLE", None):
+        ACCESS_ROLES_INHERITANCE.setdefault(base_role, set()).add(cls.ROLE)
+
     return cls
 
 
@@ -69,12 +76,19 @@ class RoleCache:
                 CourseAccessRole.objects.filter(user=user).all()
             )
 
+    @staticmethod
+    def get_roles(role):
+        """
+        Return the roles that should have the same permissions as the specified role.
+        """
+        return ACCESS_ROLES_INHERITANCE.get(role, set()) | {role}
+
     def has_role(self, role, course_id, org):
         """
         Return whether this RoleCache contains a role with the specified role, course_id, and org
         """
         return any(
-            access_role.role == role and
+            access_role.role in self.get_roles(role) and
             access_role.course_id == course_id and
             access_role.org == org
             for access_role in self._roles

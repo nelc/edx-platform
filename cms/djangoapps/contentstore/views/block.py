@@ -33,6 +33,7 @@ from xblock.core import XBlock
 from xblock.fields import Scope
 
 from cms.djangoapps.contentstore.config.waffle import SHOW_REVIEW_RULES_FLAG
+from cms.djangoapps.contentstore.toggles import use_tagging_taxonomy_list_page
 from cms.djangoapps.models.settings.course_grading import CourseGradingModel
 from cms.lib.xblock.authoring_mixin import VISIBILITY_VIEW
 from common.djangoapps.edxmako.services import MakoService
@@ -1375,6 +1376,11 @@ def create_xblock_info(xblock, data=None, metadata=None, include_ancestor_info=F
             xblock_info['has_partition_group_components'] = has_children_visible_to_specific_partition_groups(
                 xblock
             )
+
+            # If the ENABLE_TAGGING_TAXONOMY_LIST_PAGE feature flag is enabled, we show the "Manage Tags" options
+            if use_tagging_taxonomy_list_page():
+                xblock_info["use_tagging_taxonomy_list_page"] = True
+
         xblock_info['user_partition_info'] = get_visibility_partition_info(xblock, course=course)
 
     return xblock_info

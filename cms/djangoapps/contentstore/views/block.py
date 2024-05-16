@@ -17,7 +17,7 @@ from django.views.decorators.http import require_http_methods
 from edx_django_utils.plugins import pluggable_override
 from openedx_events.content_authoring.data import DuplicatedXBlockData
 from openedx_events.content_authoring.signals import XBLOCK_DUPLICATED
-from openedx_tagging.core.tagging import api as tagging_api
+from openedx.core.djangoapps.content_tagging.api import get_object_tag_counts
 from edx_proctoring.api import (
     does_backend_support_onboarding,
     get_exam_by_content_id,
@@ -417,6 +417,11 @@ def xblock_view_handler(request, usage_key_string, view_name):
 
             force_render = request.GET.get('force_render', None)
 
+            # Fetch tags of children components
+            tags_count_map = {}
+            if use_tagging_taxonomy_list_page():
+                tags_count_map = get_children_tags_count(xblock)
+
             # Set up the context to be passed to each XBlock's render method.
             context = request.GET.dict()
             context.update({
@@ -429,6 +434,7 @@ def xblock_view_handler(request, usage_key_string, view_name):
                 'paging': paging,
                 'force_render': force_render,
                 'item_url': '/container/{usage_key}',
+                "tags_count_map": tags_count_map,
             })
             fragment = get_preview_fragment(request, xblock, context)
 
@@ -1644,4 +1650,14 @@ def _get_course_unit_tags(course_key) -> dict:
     # Create a pattern to match the IDs of the units, e.g. "block-v1:org+course+run+type@vertical+block@*"
     vertical_key = course_key.make_usage_key('vertical', 'x')
     unit_key_pattern = str(vertical_key).rsplit("@", 1)[0] + "@*"
-    return tagging_api.get_object_tag_counts(unit_key_pattern)
+    return get_object_tag_counts(unit_key_pattern, count_implicit=True)
+
+
+def get_children_tags_count(xblock):
+    """
+    Returns a map with tag count of each child
+    """
+    children = xblock.get_children()
+    child_usage_keys = [str(child.location) for child in children]
+    tags_count_query = ','.join(child_usage_keys)
+    return get_object_tag_counts(tags_count_query, count_implicit=True)

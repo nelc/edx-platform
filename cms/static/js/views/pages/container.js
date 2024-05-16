@@ -24,7 +24,7 @@ function($, _, Backbone, gettext, BasePage, ViewUtils, ContainerView, XBlockView
             'click .delete-button': 'deleteXBlock',
             'click .show-actions-menu-button': 'showXBlockActionsMenu',
             'click .new-component-button': 'scrollToNewComponentButtons',
-            'click .tags-button': 'openManageTags',
+            'click .manage-tags-button': 'openManageTags',
         },
 
         options: {

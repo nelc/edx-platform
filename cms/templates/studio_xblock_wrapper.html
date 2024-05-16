@@ -86,6 +86,15 @@ block_is_unit = is_unit(xblock)
             <ul class="actions-list nav-dd ui-right">
                 % if not is_root:
                     % if can_edit:
+                        % if use_tagging and tags_count:
+                            <li class="action-item">
+                                <button data-tooltip="${_("Manage Tags")}" class="btn-default action-button manage-tags-button" data-testid="tag-count-button">
+                                    <span class="icon fa fa-tag" aria-hidden="true"></span>
+                                    <span>${tags_count}</span>
+                                    <span class="sr action-button-text">${_("Manage Tags")}</span>
+                                </button>
+                            </li>
+                        % endif
                         % if not show_inline:
                             <li class="action-item action-edit">
                                 <button class="btn-default edit-button action-button" data-usage-id=${xblock.scope_ids.usage_id}>
@@ -118,15 +127,6 @@ block_is_unit = is_unit(xblock)
                                         </span>
                                         <span class="sr">${_("Move")}</span>
                                     </button>
-                                </li>
-                            % endif
-                            % if use_tagging:
-                                <li class="action-item action-tag">
-                                    <a class="tags-button action-button" href="#" role="button">
-                                        <span class="icon fa fa-tag" aria-hidden="true"></span>
-                                        <span>?</span>
-                                        <span class="sr action-button-text">${_("Manage tags")}</span>
-                                    </a>
                                 </li>
                             % endif
                         % endif

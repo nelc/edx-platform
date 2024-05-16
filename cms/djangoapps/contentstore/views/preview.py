@@ -301,6 +301,10 @@ def _studio_wrap_xblock(xblock, view, frag, context, display_name_only=False):
         can_edit = context.get('can_edit', True)
         # Copy-paste is a new feature; while we are beta-testing it, only beta users with the Waffle flag enabled see it
         enable_copy_paste = can_edit and ENABLE_COPY_PASTE_FEATURE.is_enabled()
+        tags_count_map = context.get('tags_count_map')
+        tags_count = 0
+        if tags_count_map:
+            tags_count = tags_count_map.get(str(xblock.location), 0)
         template_context = {
             'xblock_context': context,
             'xblock': xblock,
@@ -314,7 +318,8 @@ def _studio_wrap_xblock(xblock, view, frag, context, display_name_only=False):
             'selected_groups_label': selected_groups_label,
             'can_add': context.get('can_add', True),
             'can_move': context.get('can_move', xblock.scope_ids.usage_id.context_key.is_course),
-            'language': getattr(course, 'language', None)
+            'language': getattr(course, 'language', None),
+            'tags_count': tags_count,
         }
 
         add_webpack_to_fragment(frag, "js/factories/xblock_validation")

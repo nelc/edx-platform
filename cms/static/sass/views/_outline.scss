@@ -185,6 +185,7 @@
 
     .status-release,
     .status-highlights-enabled,
+    .status-manage-tags,
     .status-studio-frontend {
       @extend %t-copy-base;
 
@@ -200,15 +201,19 @@
       }
     }
 
-    .status-highlights-enabled {
+    .status-highlights-enabled,
+    .status-manage-tags {
       vertical-align: top;
     }
 
     .status-release-label,
     .status-release-value,
     .status-highlights-enabled-label,
+    .status-course-manage-tags-label,
     .status-highlights-enabled-value,
+    .status-course-manage-tags-value,
     .status-highlights-enabled-info,
+    .status-course-manage-tags-info,
     .status-actions {
       display: inline-block;
       vertical-align: middle;
@@ -216,13 +221,15 @@
     }
 
     .status-release-value,
-    .status-highlights-enabled-value {
+    .status-highlights-enabled-value,
+    .status-course-manage-tags-value {
       @extend %t-strong;
 
       font-size: smaller;
     }
 
-    .status-highlights-enabled-info {
+    .status-highlights-enabled-info,
+    .status-course-manage-tags-info {
       font-size: smaller;
       margin-left: $baseline / 2;
     }

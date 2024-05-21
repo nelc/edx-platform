@@ -49,7 +49,6 @@ from cms.djangoapps.contentstore.utils import (
     delete_course,
     reverse_course_url,
     reverse_url,
-    get_taxonomy_tags_widget_url,
 )
 from cms.djangoapps.contentstore.views.component import ADVANCED_COMPONENT_TYPES
 from common.djangoapps.course_action_state.managers import CourseActionStateItemNotFoundError
@@ -1381,14 +1380,11 @@ class ContentStoreTest(ContentStoreTestCase):
             self.assertEqual(resp.status_code, 404)
             return
 
-        taxonomy_tags_widget_url = get_taxonomy_tags_widget_url(course.id)
-
         self.assertContains(
             resp,
-            '<article class="outline outline-complex outline-course" data-locator="{locator}" data-course-key="{course_key}" data-taxonomy-tags-widget-url="{taxonomy_tags_widget_url}" >'.format(  # lint-amnesty, pylint: disable=line-too-long
+            '<article class="outline outline-complex outline-course" data-locator="{locator}" data-course-key="{course_key}">'.format(  # lint-amnesty, pylint: disable=line-too-long
                 locator=str(course.location),
                 course_key=str(course.id),
-                taxonomy_tags_widget_url=taxonomy_tags_widget_url,
             ),
             status_code=200,
             html=True

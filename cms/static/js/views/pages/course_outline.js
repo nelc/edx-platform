@@ -4,9 +4,10 @@
 define([
     'jquery', 'underscore', 'gettext', 'js/views/pages/base_page', 'js/views/utils/xblock_utils',
     'js/views/course_outline', 'common/js/components/utils/view_utils', 'common/js/components/views/feedback_alert',
-    'common/js/components/views/feedback_notification', 'js/views/course_highlights_enable'],
+    'common/js/components/views/feedback_notification', 'js/views/course_highlights_enable', 'js/views/course_manage_tags'],
 function($, _, gettext, BasePage, XBlockViewUtils, CourseOutlineView, ViewUtils, AlertView, NoteView,
-    CourseHighlightsEnableView
+    CourseHighlightsEnableView,
+    CourseManageTagsView
 ) {
     'use strict';
     var expandedLocators, CourseOutlinePage;
@@ -91,6 +92,15 @@ function($, _, gettext, BasePage, XBlockViewUtils, CourseOutlineView, ViewUtils,
                     model: this.model
                 });
                 this.highlightsEnableView.render();
+            }
+
+            // if tagging enabled
+            if (this.model.get('use_tagging_taxonomy_list_page')) {
+                this.courseManageTagsView = new CourseManageTagsView({
+                    el: this.$('.status-manage-tags'),
+                    model: this.model
+                });
+                this.courseManageTagsView.render();
             }
 
             this.outlineView = new this.outlineViewClass({

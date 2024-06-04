@@ -4,6 +4,7 @@ Tests for users API
 
 
 import datetime
+import unittest
 from unittest.mock import patch
 from urllib.parse import parse_qs
 
@@ -36,6 +37,7 @@ from lms.djangoapps.mobile_api.testutils import (
 )
 from lms.djangoapps.mobile_api.utils import API_V1, API_V05, API_V2, API_V3
 from openedx.core.lib.courses import course_image_url
+from openedx.core.release import RELEASE_LINE
 from openedx.core.djangoapps.discussions.models import DiscussionsConfiguration
 from openedx.features.course_duration_limits.models import CourseDurationLimitConfig
 from openedx.features.course_experience.tests.views.helpers import add_course_mode
@@ -752,6 +754,10 @@ class TestDiscussionCourseEnrollmentSerializer(UrlResetMixin, MobileAPITestCase,
             context={'request': self.request, 'api_version': api_version},
         ).data
 
+    @unittest.skipIf(
+        condition=RELEASE_LINE == 'palm',
+        reason='Temporarily disable in NELC Palm because of Redwood mobile api cherry-picks',
+    )
     @ddt.data(True, False)
     def test_discussion_tab_url(self, discussion_tab_enabled):
         """

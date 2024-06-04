@@ -23,7 +23,6 @@ from model_utils.models import TimeStampedModel
 from opaque_keys.edx.django.models import CourseKeyField, UsageKeyField
 from simple_history.models import HistoricalRecords
 
-from lms.djangoapps.discussion import django_comment_client
 from openedx.core.djangoapps.catalog.models import CatalogIntegration
 from openedx.core.djangoapps.lang_pref.api import get_closest_released_language
 from openedx.core.djangoapps.models.course_details import CourseDetails
@@ -657,7 +656,7 @@ class CourseOverview(TimeStampedModel):
         log.info('Finished generating course overviews.')
 
     @classmethod
-    def get_all_courses(cls, orgs=None, filter_=None, active_only=False):
+    def get_all_courses(cls, orgs=None, filter_=None, active_only=False, course_keys=None):
         """
         Return a queryset containing all CourseOverview objects in the database.
 
@@ -666,11 +665,16 @@ class CourseOverview(TimeStampedModel):
                 filtering by organization.
             filter_ (dict): Optional parameter that allows custom filtering.
             active_only (bool): If provided, only the courses that have not ended will be returned.
+            course_keys (list[string]): Optional parameter that allows case-insensitive
+                filter by course ids
         """
         # Note: If a newly created course is not returned in this QueryList,
         # make sure the "publish" signal was emitted when the course was
         # created. For tests using CourseFactory, use emit_signals=True.
         course_overviews = CourseOverview.objects.all()
+
+        if course_keys:
+            course_overviews = course_overviews.filter(id__in=course_keys)
 
         if orgs:
             # In rare cases, courses belonging to the same org may be accidentally assigned
@@ -697,15 +701,17 @@ class CourseOverview(TimeStampedModel):
         """
         return CourseOverview.objects.values_list('id', flat=True)
 
-    def is_discussion_tab_enabled(self):
+    def is_discussion_tab_enabled(self, user=None):
         """
         Returns True if course has discussion tab and is enabled
         """
+        # Importing here to avoid circular import
+        from lms.djangoapps.discussion.plugins import DiscussionTab
         tabs = self.tab_set.all()
         # creates circular import; hence explicitly referenced is_discussion_enabled
         for tab in tabs:
-            if tab.tab_id == "discussion" and django_comment_client.utils.is_discussion_enabled(self.id):
-                return True
+            if tab.tab_id == "discussion":
+                return DiscussionTab.is_enabled(self, user)
         return False
 
     @property

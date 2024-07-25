@@ -5,7 +5,7 @@ Views for user API
 
 import logging
 from functools import cached_property
-from typing import Optional
+from typing import Optional, List
 
 from completion.exceptions import UnavailableCompletionData
 from completion.utilities import get_key_to_last_completed_block
@@ -410,7 +410,7 @@ class UserCourseEnrollmentsList(generics.ListAPIView):
             # return all courses, with associated expiration
             return mobile_available
 
-    def get_same_org_mobile_available_enrollments(self) -> list[CourseEnrollment]:
+    def get_same_org_mobile_available_enrollments(self) -> List[CourseEnrollment]:
         """
         Gets list with `CourseEnrollment` for mobile available courses.
         """

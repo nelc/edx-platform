@@ -1,7 +1,7 @@
 """
 Unit tests for Learner Dashboard REST APIs and Views
 """
-
+import unittest
 from unittest import mock
 from uuid import uuid4
 
@@ -11,6 +11,8 @@ from django.test import TestCase
 from django.urls import reverse_lazy
 from edx_toggles.toggles.testutils import override_waffle_flag
 from enterprise.models import EnterpriseCourseEnrollment
+
+from openedx.core.release import RELEASE_LINE
 from xmodule.modulestore.tests.django_utils import SharedModuleStoreTestCase
 from xmodule.modulestore.tests.factories import (
     CourseFactory as ModuleStoreCourseFactory,
@@ -244,6 +246,10 @@ class TestProgramsView(SharedModuleStoreTestCase, ProgramCacheMixin):
 
 
 @ddt.ddt
+@unittest.skipIf(
+    RELEASE_LINE == "palm",
+    'Omar note: This is mostly a Redwood test that got here through cherry-picks',
+)
 class TestCourseRecommendationApiView(TestCase):
     """Unit tests for the course recommendations on dashboard page."""
 

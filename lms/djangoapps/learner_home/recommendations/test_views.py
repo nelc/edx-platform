@@ -3,6 +3,7 @@ Tests for Course Recommendations
 """
 
 import json
+import unittest
 from unittest import mock
 from unittest.mock import Mock
 
@@ -19,9 +20,14 @@ from lms.djangoapps.learner_home.test_utils import (
 from lms.djangoapps.learner_home.recommendations.waffle import (
     ENABLE_LEARNER_HOME_AMPLITUDE_RECOMMENDATIONS,
 )
+from openedx.core.release import RELEASE_LINE
 
 
 @ddt.ddt
+@unittest.skipIf(
+    RELEASE_LINE == "palm",
+    'Omar note: This is mostly a Redwood test that got here through cherry-picks',
+)
 class TestCourseRecommendationApiView(TestCase):
     """Unit tests for the course recommendations on learner home page."""
 

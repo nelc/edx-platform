@@ -1,7 +1,7 @@
 """
 Unit tests for Learner Dashboard REST APIs and Views
 """
-
+import unittest
 from unittest import mock
 from uuid import uuid4
 
@@ -11,6 +11,8 @@ from django.test import TestCase
 from django.urls import reverse_lazy
 from edx_toggles.toggles.testutils import override_waffle_flag
 from enterprise.models import EnterpriseCourseEnrollment
+
+from openedx.core.release import RELEASE_LINE
 from xmodule.modulestore.tests.django_utils import SharedModuleStoreTestCase
 from xmodule.modulestore.tests.factories import (
     CourseFactory as ModuleStoreCourseFactory,
@@ -54,7 +56,6 @@ PROGRAMS_UTILS_MODULE = 'openedx.core.djangoapps.programs.utils'
 class TestProgramProgressDetailView(ProgramsApiConfigMixin, SharedModuleStoreTestCase):
     """Unit tests for the program progress detail page."""
     program_uuid = str(uuid4())
-    password = 'test'
     url = reverse_lazy('learner_dashboard:v0:program_progress_detail', kwargs={'program_uuid': program_uuid})
 
     @classmethod
@@ -75,7 +76,7 @@ class TestProgramProgressDetailView(ProgramsApiConfigMixin, SharedModuleStoreTes
         super().setUp()
 
         self.user = UserFactory()
-        self.client.login(username=self.user.username, password=self.password)
+        self.client.login(username=self.user.username, password=self.TEST_PASSWORD)
 
     def assert_program_data_present(self, response):
         """Verify that program data is present."""
@@ -148,7 +149,6 @@ class TestProgramsView(SharedModuleStoreTestCase, ProgramCacheMixin):
 
     enterprise_uuid = str(uuid4())
     program_uuid = str(uuid4())
-    password = 'test'
     url = reverse_lazy('learner_dashboard:v0:program_list', kwargs={'enterprise_uuid': enterprise_uuid})
 
     @classmethod
@@ -188,7 +188,7 @@ class TestProgramsView(SharedModuleStoreTestCase, ProgramCacheMixin):
 
     def setUp(self):
         super().setUp()
-        self.client.login(username=self.user.username, password=self.password)
+        self.client.login(username=self.user.username, password=self.TEST_PASSWORD)
         self.set_program_in_catalog_cache(self.program_uuid, self.program)
         ProgramEnrollmentFactory.create(
             user=self.user,
@@ -246,6 +246,10 @@ class TestProgramsView(SharedModuleStoreTestCase, ProgramCacheMixin):
 
 
 @ddt.ddt
+@unittest.skipIf(
+    RELEASE_LINE == "palm",
+    'Omar note: This is mostly a Redwood test that got here through cherry-picks',
+)
 class TestCourseRecommendationApiView(TestCase):
     """Unit tests for the course recommendations on dashboard page."""
 

@@ -190,3 +190,14 @@ class RoleCacheTestCase(TestCase):  # lint-amnesty, pylint: disable=missing-clas
     def test_empty_cache(self, role, target):  # lint-amnesty, pylint: disable=unused-argument
         cache = RoleCache(self.user)
         assert not cache.has_role(*target)
+
+    @ddt.data(IN_KEY.org, 'edx', 'EDX', 'EdX')
+    def test_org_case_insensitive(self, compare_to_org):
+        org_role = OrgStaffRole(self.IN_KEY.org)
+        course_role = CourseInstructorRole(self.IN_KEY)
+        org_role.add_users(self.user)
+        course_role.add_users(self.user)
+
+        role_cache = RoleCache(self.user)
+        assert role_cache.has_role('staff', None, compare_to_org)
+        assert role_cache.has_role('instructor', self.IN_KEY, compare_to_org)

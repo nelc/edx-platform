@@ -611,7 +611,7 @@ class AccessTestCase(LoginEnrollmentTestCase, ModuleStoreTestCase, MilestonesTes
         )
         assert not access._has_access_course(user, 'see_in_catalog', course)
         assert access._has_access_course(user, 'see_about_page', course)
-        assert not access._has_access_course(staff, 'see_in_catalog', course)
+        assert access._has_access_course(staff, 'see_in_catalog', course)
         assert access._has_access_course(staff, 'see_about_page', course)
 
         # Now set visibility to none, which means neither in catalog nor about pages
@@ -621,7 +621,7 @@ class AccessTestCase(LoginEnrollmentTestCase, ModuleStoreTestCase, MilestonesTes
         )
         assert not access._has_access_course(user, 'see_in_catalog', course)
         assert not access._has_access_course(user, 'see_about_page', course)
-        assert not access._has_access_course(staff, 'see_in_catalog', course)
+        assert access._has_access_course(staff, 'see_in_catalog', course)
         assert access._has_access_course(staff, 'see_about_page', course)
 
     @patch.dict("django.conf.settings.FEATURES", {'ENABLE_PREREQUISITE_COURSES': True, 'MILESTONES_APP': True})

@@ -1,9 +1,8 @@
 """
 Toggles for accounts related code.
 """
-
+from django.conf import settings
 from edx_toggles.toggles import WaffleFlag
-
 from openedx.core.djangoapps.site_configuration import helpers as configuration_helpers
 
 # .. toggle_name: order_history.redirect_to_microfrontend
@@ -24,6 +23,13 @@ def should_redirect_to_order_history_microfrontend():
         configuration_helpers.get_value('ENABLE_ORDER_HISTORY_MICROFRONTEND') and
         REDIRECT_TO_ORDER_HISTORY_MICROFRONTEND.is_enabled()
     )
+
+
+def should_show_linked_accounts_tab():
+    """Check if the the var `SHOW_LINKED_ACCOUNTS`
+        is defined in configuration helpers.
+    """
+    return getattr(settings, 'SHOW_LINKED_ACCOUNTS', True)
 
 
 # .. toggle_name: account.redirect_to_microfrontend

@@ -394,7 +394,10 @@ def _has_access_course(user, action, courselike):
         """
         return (
             _has_catalog_visibility(courselike, CATALOG_VISIBILITY_CATALOG_AND_ABOUT)
-            or _has_staff_access_to_block(user, courselike, courselike.id)
+            or (
+                _has_staff_access_to_block(user, courselike, courselike.id)
+                and getattr(settings, "STAFF_CAN_SEE_IN_CATALOG", True)
+            )
         )
 
     @function_trace('can_see_about_page')

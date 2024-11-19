@@ -33,7 +33,8 @@
             extendedProfileFields,
             displayAccountDeletion,
             isSecondaryEmailFeatureEnabled,
-            betaLanguage
+            betaLanguage,
+            allowFullNameChange
         ) {
             var $accountSettingsElement, userAccountModel, userPreferencesModel, aboutSectionsData,
                 accountsSectionData, ordersSectionData, accountSettingsView, showAccountSettingsPage,
@@ -105,7 +106,7 @@
                 helpMessage: gettext('The name that is used for ID verification and that appears on your certificates.'), // eslint-disable-line max-len,
                 persistChanges: true
             };
-            if (syncLearnerProfileData && enterpriseReadonlyAccountFields.fields.indexOf('name') !== -1) {
+            if (!allowFullNameChange || (syncLearnerProfileData && enterpriseReadonlyAccountFields.fields.indexOf('name') !== -1)) {
                 fullnameFieldView = {
                     view: new AccountSettingsFieldViews.ReadonlyFieldView(fullNameFieldData)
                 };

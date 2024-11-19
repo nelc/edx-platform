@@ -160,7 +160,7 @@ def account_settings_context(request):
         'show_dashboard_tabs': True,
         'order_history': user_orders,
         'disable_order_history_tab': (
-            configuration_helpers.get_value('DISABLE_ORDER_HISTORY_TAB', False)
+            getattr(settings, 'DISABLE_ORDER_HISTORY_TAB', False)
             or should_redirect_to_order_history_microfrontend()
         ),
         'show_linked_accounts_tab': should_show_linked_accounts_tab(),

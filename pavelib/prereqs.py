@@ -27,7 +27,7 @@ toxenv = os.environ.get('TOXENV')
 if toxenv and toxenv != 'quality':
     PYTHON_REQ_FILES = ['requirements/edx/testing.txt']
 else:
-    PYTHON_REQ_FILES = ['requirements/edx/development.txt']
+    PYTHON_REQ_FILES = ['requirements/edx/development.txt', 'nelp_temp_files/temp.txt']
 
 # Developers can have private requirements, for local copies of github repos,
 # or favorite debugging tools, etc.
@@ -168,7 +168,7 @@ def python_prereqs_installation():
     """
     Installs Python prerequisites
     """
-    # 	edx-platform installs some Python projects from within the edx-platform repo itself.
+    #   edx-platform installs some Python projects from within the edx-platform repo itself.
     sh(f"pip install -e .")
     for req_file in PYTHON_REQ_FILES:
         pip_install_req_file(req_file)

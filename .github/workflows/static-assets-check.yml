@@ -70,6 +70,10 @@ jobs:
       run: |
         make base-requirements
 
+    - name: Show glibc version
+      run: |
+        ldd --version
+
     - name: Initiate Mongo DB Service
       run: sudo systemctl start mongod
 

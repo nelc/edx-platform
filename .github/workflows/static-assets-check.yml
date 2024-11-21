@@ -43,7 +43,7 @@ jobs:
     - name: Install system Packages
       run: |
         sudo apt-get update
-        sudo apt-get install libxmlsec1-dev pkg-config libc6 libxml2-dev
+        sudo apt-get install  pkg-config  libxml2-dev=2.9.4+dfsg1-6.1ubuntu1.9 libxmlsec1-dev=1.2.25-1build1
 
     - name: Setup Node
       uses: actions/setup-node@v4

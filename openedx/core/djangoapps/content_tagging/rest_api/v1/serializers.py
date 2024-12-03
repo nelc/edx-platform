@@ -4,6 +4,8 @@ API Serializers for content tagging org
 
 from __future__ import annotations
 
+from typing import List
+
 from rest_framework import serializers, fields
 
 from openedx_tagging.core.tagging.rest_api.v1.serializers import (
@@ -72,7 +74,7 @@ class TaxonomyOrgSerializer(TaxonomySerializer):
     orgs = serializers.SerializerMethodField()
     all_orgs = serializers.SerializerMethodField()
 
-    def get_orgs(self, obj) -> list[str]:
+    def get_orgs(self, obj) -> List[str]:
         """
         Return the list of orgs for the taxonomy.
         """

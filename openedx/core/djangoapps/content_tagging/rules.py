@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Union
+from typing import Union, List
 
 import django.contrib.auth.models
 import openedx_tagging.core.tagging.rules as oel_tagging
@@ -41,7 +41,7 @@ def is_org_user(user: UserType, orgs: list[Organization]) -> bool:
     return len(get_user_orgs(user, orgs)) > 0
 
 
-def get_admin_orgs(user: UserType, orgs: list[Organization] | None = None) -> list[Organization]:
+def get_admin_orgs(user: UserType, orgs: list[Organization] | None = None) -> List[Organization]:
     """
     Returns a list of orgs that the given user is an org-level staff, from the given list of orgs.
 
@@ -53,7 +53,7 @@ def get_admin_orgs(user: UserType, orgs: list[Organization] | None = None) -> li
     ]
 
 
-def _get_content_creator_orgs(user: UserType, orgs: list[Organization]) -> list[Organization]:
+def _get_content_creator_orgs(user: UserType, orgs: list[Organization]) -> List[Organization]:
     """
     Returns a list of orgs that the given user is an org-level library user or instructor, from the given list of orgs.
     """
@@ -66,7 +66,7 @@ def _get_content_creator_orgs(user: UserType, orgs: list[Organization]) -> list[
     ]
 
 
-def _get_course_user_orgs(user: UserType, orgs: list[Organization]) -> list[Organization]:
+def _get_course_user_orgs(user: UserType, orgs: list[Organization]) -> List[Organization]:
     """
     Returns a list of orgs for courses where the given user is staff or instructor, from the given list of orgs.
 
@@ -97,7 +97,7 @@ def _get_course_user_orgs(user: UserType, orgs: list[Organization]) -> list[Orga
     ]
 
 
-def _get_library_user_orgs(user: UserType, orgs: list[Organization]) -> list[Organization]:
+def _get_library_user_orgs(user: UserType, orgs: list[Organization]) -> List[Organization]:
     """
     Returns a list of orgs (from the given list of orgs) that are associated with libraries that the given user has
     explicitly been granted access to.
@@ -110,7 +110,7 @@ def _get_library_user_orgs(user: UserType, orgs: list[Organization]) -> list[Org
     return list(set(library_orgs).intersection(orgs))
 
 
-def get_user_orgs(user: UserType, orgs: list[Organization] | None = None) -> list[Organization]:
+def get_user_orgs(user: UserType, orgs: list[Organization] | None = None) -> List[Organization]:
     """
     Return a list of orgs that the given user is a member of (instructor or content creator),
     from the given list of orgs.

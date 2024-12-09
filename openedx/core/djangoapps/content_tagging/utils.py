@@ -3,6 +3,8 @@ Utils functions for tagging
 """
 from __future__ import annotations
 
+from typing import List
+
 from edx_django_utils.cache import RequestCache
 from opaque_keys import InvalidKeyError
 from opaque_keys.edx.keys import CourseKey, UsageKey
@@ -89,7 +91,7 @@ class TaggingRulesCache:
         """
         self.request_cache.clear()
 
-    def get_orgs(self, org_names: list[str] | None = None) -> list[Organization]:
+    def get_orgs(self, org_names: list[str] | None = None) -> List[Organization]:
         """
         Returns the Organizations with the given name(s), or all Organizations if no names given.
 
@@ -111,7 +113,7 @@ class TaggingRulesCache:
 
         return all_orgs.values()
 
-    def get_library_orgs(self, user, org_names: list[str]) -> list[Organization]:
+    def get_library_orgs(self, user, org_names: list[str]) -> List[Organization]:
         """
         Returns the Organizations that are associated with libraries that the given user has explicitly been granted
         access to.

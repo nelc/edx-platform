@@ -28,6 +28,7 @@ from openedx.core.djangoapps.dark_lang.models import DarkLangConfig
 from openedx.core.djangoapps.lang_pref.api import all_languages, released_languages
 from openedx.core.djangoapps.programs.models import ProgramsApiConfig
 from openedx.core.djangoapps.site_configuration import helpers as configuration_helpers
+from openedx.core.djangoapps.theming import helpers as theming_helpers
 from openedx.core.djangoapps.user_api.accounts.toggles import (
     should_redirect_to_account_microfrontend,
     should_redirect_to_order_history_microfrontend,
@@ -276,6 +277,15 @@ def _get_extended_profile_fields():
         "specialty": _("Specialty"),
         "work_experience": _("Work experience")
     }
+    request = theming_helpers.get_current_request()
+
+    if request:
+        extended_profile_fields_translations = configuration_helpers.get_value(
+            'extended_profile_fields_translations',
+            {},
+        )
+        translations = extended_profile_fields_translations.get(request.LANGUAGE_CODE, {})
+        field_labels_map.update(translations)
 
     extended_profile_field_names = configuration_helpers.get_value('extended_profile_fields', [])
     for field_to_exclude in fields_already_showing:

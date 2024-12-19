@@ -23,6 +23,11 @@ from openedx.core.djangoapps.theming.helpers import (
     is_comprehensive_theming_enabled
 )
 
+import logging
+
+
+logger = logging.getLogger(__name__)
+
 
 class ThemeMixin:
     """
@@ -82,6 +87,17 @@ class ThemeMixin:
             return False
 
         # in debug mode check static asset from within the project directory
+        logger.info("//////////////////////////////////////////////////////////////////////")
+        logger.info("//////////////////////////////////////////////////////////////////////")
+        logger.info("//////////////////////////////////////////////////////////////////////")
+        logger.info("//////////////////////////////////////////////////////////////////////")
+        logger.info("//////////////////////////////////////////////////////////////////////")
+
+        logger.info("Aqui empieza lo bueno")
+        logger.info("Debug setting es %s", settings.DEBUG)
+        logger.info("Name es %s", name)
+        logger.info("Theme es %s", theme)
+
         if settings.DEBUG:
             themes_location = get_theme_base_dir(theme, suppress_error=True)
             # Nothing can be themed if we don't have a theme location or required params.
@@ -96,10 +112,20 @@ class ThemeMixin:
             ])
             name = name[1:] if name.startswith("/") else name
             path = safe_join(themed_path, name)
-            return os.path.exists(path)
+            output = os.path.exists(path)
+
+            logger.info("Este es el path %s", path)
+            logger.info("Este es el output %s", output)
+
+            return output
         # in live mode check static asset in the static files dir defined by "STATIC_ROOT" setting
         else:
-            return self.exists(os.path.join(theme, name))
+            path = os.path.join(theme, name)
+            output = self.exists(path)
+            logger.info("Este es el path %s", path)
+            logger.info("Este es el output %s", output)
+
+            return output
 
 
 class ThemeStorage(ThemeMixin, StaticFilesStorage):

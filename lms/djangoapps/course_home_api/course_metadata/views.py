@@ -15,6 +15,7 @@ from openedx.core.djangoapps.courseware_api.utils import get_celebrations_dict
 from common.djangoapps.student.models import CourseEnrollment
 from lms.djangoapps.course_api.api import course_detail
 from lms.djangoapps.course_goals.models import UserActivity
+from lms.djangoapps.course_home_api import permissions
 from lms.djangoapps.course_home_api.course_metadata.serializers import CourseHomeMetadataSerializer
 from lms.djangoapps.courseware.access import has_access
 from lms.djangoapps.courseware.context_processor import user_timezone_locale_prefs
@@ -76,9 +77,8 @@ class CourseHomeMetadataView(RetrieveAPIView):
         course_key = CourseKey.from_string(course_key_string)
         original_user_is_global_staff = self.request.user.is_staff
         original_user_is_staff = has_access(request.user, 'staff', course_key).has_access
-
+        user_can_masquarade = request.user.has_perm(permissions.CAN_MASQUARADE_LEARNER_PROGRESS, course_key)
         course = course_detail(request, request.user.username, course_key)
-
         # We must compute course load access *before* setting up masquerading,
         # else course staff (who are not enrolled) will not be able view
         # their course from the perspective of a learner.
@@ -86,7 +86,7 @@ class CourseHomeMetadataView(RetrieveAPIView):
             course,
             request.user,
             'load',
-            check_if_enrolled=True,
+            check_if_enrolled=(not user_can_masquarade),
             check_if_authenticated=True,
             apply_enterprise_checks=True,
         )
@@ -94,7 +94,7 @@ class CourseHomeMetadataView(RetrieveAPIView):
         _, request.user = setup_masquerade(
             request,
             course_key,
-            staff_access=original_user_is_staff,
+            staff_access=user_can_masquarade,
             reset_masquerade_data=True,
         )
 

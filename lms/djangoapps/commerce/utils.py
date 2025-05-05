@@ -1,6 +1,6 @@
 """Utilities to assist with commerce tasks."""
 
-
+import importlib
 import json
 import logging
 from urllib.parse import urlencode, urljoin
@@ -538,3 +538,9 @@ def create_zendesk_ticket(requester_name, requester_email, subject, body, tags=N
         log.exception('Failed to create ticket.')
         return False
     return True
+
+
+if hasattr(settings, "ECOMMERCE_SERVICE_CLASS"):
+    ecommerce_service_path = settings.ECOMMERCE_SERVICE_CLASS
+    module = importlib.import_module(ecommerce_service_path.rsplit('.', 1)[0])
+    EcommerceService = getattr(module, ecommerce_service_path.split('.')[-1])

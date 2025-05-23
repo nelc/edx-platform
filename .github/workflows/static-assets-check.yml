@@ -16,7 +16,7 @@ jobs:
         python-version: [ '3.8', '3.11' ]
         node-version: [ 18 ]
         npm-version: [ 10.5.x ]
-        mongo-version: ["4.4", "7.0"]
+        mongo-version: ["7.0"]
 
     services:
       mongo:

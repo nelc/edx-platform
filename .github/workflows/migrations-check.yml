@@ -19,7 +19,7 @@ jobs:
         # within the global constraint i.e. Django==4.2.8 in current case
         # because we have global constraint of Django<4.2
         django-version: ["pinned"]
-        mongo-version: ["4", "7"]
+        mongo-version: ["7"]
         mysql-version: ["8"]
     services:
       mongo:

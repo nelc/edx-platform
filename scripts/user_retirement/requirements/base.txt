@@ -81,8 +81,10 @@ jmespath==1.0.1
     # via
     #   boto3
     #   botocore
-lxml==5.3.0
-    # via zeep
+lxml==4.9.4
+    # via
+    #   -c scripts/user_retirement/requirements/../../../requirements/constraints.txt
+    #   zeep
 more-itertools==10.2.0
     # via simple-salesforce
 newrelic==9.9.0

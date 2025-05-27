@@ -288,13 +288,14 @@ class StudentModuleHistory(BaseStudentModuleHistory):
     student_module = models.ForeignKey(StudentModule, db_index=True, db_constraint=False, on_delete=models.CASCADE)
 
     def __repr__(self):
-        return "StudentModuleHistory<{!r}>".format(
-            {
-                "course_id": str(self.student_module.course_id),
-                "module_type": self.student_module.module_type,
-                "student_id": self.student_module.student_id,
-                "grade": self.grade,
-            })
+        student_dict = {
+            "course_id": str(self.student_module.course_id),
+            "module_type": self.student_module.module_type,
+            "student_id": self.student_module.student_id,
+            "grade": self.grade,
+        }
+
+        return f"StudentModuleHistory<{student_dict!r}>"
 
     def __str__(self):
         return str(repr(self))

@@ -12,11 +12,11 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: [ ubuntu-20.04 ]
+        os: [ ubuntu-24.04 ]
         python-version: [ '3.8', '3.11' ]
         node-version: [ 18 ]
         npm-version: [ 10.5.x ]
-        mongo-version: ["4.4", "7.0"]
+        mongo-version: ["7.0"]
 
     services:
       mongo:
@@ -69,9 +69,6 @@ jobs:
     - name: Install Required Python Dependencies
       run: |
         make base-requirements
-
-    - name: Initiate Mongo DB Service
-      run: sudo systemctl start mongod
 
     - name: Add node_modules bin to $Path
       run: echo $GITHUB_WORKSPACE/node_modules/.bin >> $GITHUB_PATH

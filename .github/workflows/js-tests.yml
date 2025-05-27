@@ -12,7 +12,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: [ ubuntu-20.04 ]
+        os: [ ubuntu-24.04 ]
         node-version: [ 18 ]
         python-version: [ '3.8', '3.11' ]
 
@@ -26,6 +26,7 @@ jobs:
       uses: actions/setup-node@v4
       with:
         node-version: ${{ matrix.node-version }}
+        cache: 'npm'
 
     - name: Setup npm
       run: npm i -g npm@10.5.x
@@ -63,7 +64,10 @@ jobs:
       run: |
         make base-requirements
 
-    - uses: c-hive/gha-npm-cache@v1
+
+    - name: Install npm
+      run: npm ci
+
     - name: Run JS Tests
       env:
         TEST_SUITE: js-unit

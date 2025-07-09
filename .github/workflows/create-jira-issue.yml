@@ -1,0 +1,34 @@
+name: Trigger Jira Issue Creation
+
+on:
+  pull_request:
+    types:
+      - closed
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    environment:
+      name: ${{ github.event.pull_request.base.ref }}
+    outputs:
+      story_summary: ${{ vars.MIGRATION_BACKLOG_JIRA_STORY_SUMMARY }}
+      story_description: ${{ vars.MIGRATION_BACKLOG_JIRA_STORY_DESCRIPTION }}
+    steps:
+      - run: echo "Preparing input vars..."
+  create-jira-issue:
+    needs: prepare
+    if: github.event.pull_request.merged == true
+    uses: nelc/actions-hub/.github/workflows/create-jira-issue.yml@main
+    with:
+      story_summary: ${{ needs.prepare.outputs.story_summary }}
+      story_description: ${{ needs.prepare.outputs.story_description }}
+      subtask_summary: "${{ github.event.pull_request.title }}"
+      subtask_description: "${{ github.event.pull_request.body }} 🔗 PR: ${{ github.event.pull_request.html_url }}"
+      environment: ${{ github.event.pull_request.base.ref }}
+    secrets:
+      MIGRATION_BACKLOG_JIRA_EMAIL: ${{ secrets.MIGRATION_BACKLOG_JIRA_EMAIL }}
+      MIGRATION_BACKLOG_JIRA_TOKEN: ${{ secrets.MIGRATION_BACKLOG_JIRA_TOKEN }}
+      MIGRATION_BACKLOG_JIRA_URL: ${{ secrets.MIGRATION_BACKLOG_JIRA_URL }}
+      MIGRATION_BACKLOG_JIRA_PROJECT: ${{ secrets.MIGRATION_BACKLOG_JIRA_PROJECT }}
+      MIGRATION_BACKLOG_JIRA_EPIC_KEY: ${{ secrets.MIGRATION_BACKLOG_JIRA_EPIC_KEY }}
+      MIGRATION_BACKLOG_JIRA_EPIC_LINK_FIELD: ${{ secrets.MIGRATION_BACKLOG_JIRA_EPIC_LINK_FIELD }}

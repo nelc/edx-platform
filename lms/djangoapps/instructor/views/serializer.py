@@ -373,3 +373,12 @@ class CertificateSerializer(serializers.Serializer):
             return None
 
         return user
+
+
+class StudentsUpdateEnrollmentSerializer(serializers.Serializer):
+    """Serializer for student enroll/unenroll actions."""
+    action = serializers.ChoiceField(choices=["enroll", "unenroll"])
+    identifiers = serializers.CharField()
+    auto_enroll = serializers.BooleanField(default=False)
+    email_students = serializers.BooleanField(default=False)
+    reason = serializers.CharField(required=False, allow_blank=True)

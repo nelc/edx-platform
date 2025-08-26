@@ -9,7 +9,6 @@ from collections import defaultdict
 
 from django.utils.translation import gettext as _
 
-from cms.djangoapps.contentstore.utils import reverse_usage_url
 from common.djangoapps.util.db import MYSQL_MAX_INT, generate_int_id
 from lms.lib.utils import get_parent_unit
 from openedx.core.djangoapps.course_groups.partition_scheme import get_cohorted_user_partition
@@ -118,6 +117,22 @@ class GroupConfiguration:
         """
         Get usage info for unit/block.
         """
+        # MIGRATION NELC NOTE:
+        # This import was originally at the top of the file:
+        #     from cms.djangoapps.contentstore.utils import reverse_usage_url
+        #
+        # However, when the LMS loads this module (because we force CMS signal
+        # registration in LMS via `from cms.djangoapps.contentstore.signals import handlers`) in eox-nelp,
+        # importing `reverse_usage_url` at the top level triggers dependencies on
+        # `openedx.core.djangoapps.content.search`, which does not exist in the LMS
+        # context. This causes runtime errors when starting LMS.
+        #
+        # To fix this, we moved the import into `_get_usage_dict`, which is the only
+        # method that uses it. This way:
+        #   - In CMS, the function still works normally.
+        #   - In LMS, the import is never executed, avoiding the error.
+        from cms.djangoapps.contentstore.utils import reverse_usage_url
+
         parent_unit = get_parent_unit(block)
 
         if unit == parent_unit and not block.has_children:

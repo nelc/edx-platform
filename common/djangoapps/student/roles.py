@@ -167,7 +167,7 @@ class RoleCache:
         course_id_string = get_role_cache_key_for_course(course_id)
         course_roles = self._roles_by_course_id.get(course_id_string, [])
         return any(
-            access_role.role in self.get_roles(role) and access_role.org == org
+            access_role.role in self.get_roles(role) and access_role.org.lower() == org.lower()
             for access_role in course_roles
         )
 

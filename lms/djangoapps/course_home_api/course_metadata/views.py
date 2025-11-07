@@ -17,6 +17,7 @@ from common.djangoapps.student.models import CourseEnrollment
 from lms.djangoapps.certificates.api import certificates_viewable_for_course
 from lms.djangoapps.course_api.api import course_detail
 from lms.djangoapps.course_goals.models import UserActivity
+from lms.djangoapps.course_home_api import permissions
 from lms.djangoapps.course_home_api.course_metadata.serializers import CourseHomeMetadataSerializer
 from lms.djangoapps.course_home_api.toggles import new_discussion_sidebar_view_is_enabled
 from lms.djangoapps.courseware.access import has_access, has_cms_access
@@ -83,6 +84,7 @@ class CourseHomeMetadataView(RetrieveAPIView):
         course_key = CourseKey.from_string(course_key_string)
         original_user_is_global_staff = self.request.user.is_staff  # noqa: F841
         original_user_is_staff = has_access(request.user, 'staff', course_key).has_access
+        user_can_masquerade = request.user.has_perm(permissions.CAN_MASQUERADE_LEARNER_PROGRESS, course_key)
 
         try:
             course = course_detail(request, request.user.username, course_key)
@@ -100,7 +102,7 @@ class CourseHomeMetadataView(RetrieveAPIView):
             course,
             request.user,
             'load',
-            check_if_enrolled=True,
+            check_if_enrolled=(not user_can_masquerade),
             check_if_authenticated=True,
             apply_enterprise_checks=True,
         )
@@ -108,7 +110,7 @@ class CourseHomeMetadataView(RetrieveAPIView):
         _, request.user = setup_masquerade(
             request,
             course_key,
-            staff_access=original_user_is_staff,
+            staff_access=user_can_masquerade,
             reset_masquerade_data=True,
         )
 

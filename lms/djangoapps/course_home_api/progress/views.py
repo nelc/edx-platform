@@ -14,6 +14,7 @@ from rest_framework.response import Response
 
 from xmodule.modulestore.django import modulestore
 from common.djangoapps.student.models import CourseEnrollment
+from lms.djangoapps.course_home_api import permissions
 from lms.djangoapps.course_home_api.progress.serializers import ProgressTabSerializer
 from lms.djangoapps.course_home_api.toggles import course_home_mfe_progress_tab_is_active
 from lms.djangoapps.courseware.access import has_access, has_ccx_coach_role
@@ -188,8 +189,9 @@ class ProgressTabView(RetrieveAPIView):
         monitoring_utils.set_custom_attribute('user_id', request.user.id)
         monitoring_utils.set_custom_attribute('is_staff', request.user.is_staff)
         is_staff = bool(has_access(request.user, 'staff', course_key))
+        can_masquarade = request.user.has_perm(permissions.CAN_MASQUARADE_LEARNER_PROGRESS, course_key)
 
-        student = self._get_student_user(request, course_key, student_id, is_staff)
+        student = self._get_student_user(request, course_key, student_id, can_masquarade)
         username = get_enterprise_learner_generic_name(request) or student.username
 
         course = get_course_or_403(student, 'load', course_key, check_if_enrolled=False)
@@ -198,7 +200,7 @@ class ProgressTabView(RetrieveAPIView):
         enrollment = CourseEnrollment.get_enrollment(student, course_key)
         enrollment_mode = getattr(enrollment, 'mode', None)
 
-        if not (enrollment and enrollment.is_active) and not is_staff:
+        if not (enrollment and enrollment.is_active) and not can_masquarade:
             return Response('User not enrolled.', status=401)
 
         # The block structure is used for both the course_grade and has_scheduled content fields

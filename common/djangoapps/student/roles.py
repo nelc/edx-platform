@@ -546,3 +546,37 @@ class UserBasedRole:
         * role (will be self.role--thus uninteresting)
         """
         return CourseAccessRole.objects.filter(role__in=RoleCache.get_roles(self.role), user=self.user)
+
+
+def get_user_course_role(user, course_key):
+    """
+    Get the role for a user in a course from CourseAccessRole model.
+    
+    First checks for course-specific roles (where course_id matches),
+    then falls back to org-level roles (where course_id is NULL/Empty).
+    If the user has multiple roles, returns the first one found.
+    
+    Args:
+        user: Django User object
+        course_key: CourseKey for the course
+        
+    Returns:
+        str: The exact role name from CourseAccessRole, or None if the user has no role
+    """
+    # First, check for course-specific role
+    role_entry = CourseAccessRole.objects.filter(
+        user=user,
+        course_id=course_key
+    ).first()
+    
+    if role_entry:
+        return role_entry.role
+    
+    # If no course-specific role, check for org-level role (course_id is Empty)
+    role_entry = CourseAccessRole.objects.filter(
+        user=user,
+        org=course_key.org,
+        course_id=CourseKeyField.Empty
+    ).first()
+    
+    return role_entry.role if role_entry else None

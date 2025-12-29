@@ -10,6 +10,7 @@ from .views import (
     CourseCertificatesView,
     CourseDetailsView,
     CourseTeamView,
+    CourseUserRoleView,
     CourseTextbooksView,
     CourseIndexView,
     CourseGradingView,
@@ -91,6 +92,11 @@ urlpatterns = [
         fr'^course_team/{COURSE_ID_PATTERN}$',
         CourseTeamView.as_view(),
         name="course_team"
+    ),
+    re_path(
+        fr'^course_user_role/{COURSE_ID_PATTERN}$',
+        CourseUserRoleView.as_view(),
+        name="course_user_role"
     ),
     re_path(
         fr'^course_grading/{COURSE_ID_PATTERN}$',

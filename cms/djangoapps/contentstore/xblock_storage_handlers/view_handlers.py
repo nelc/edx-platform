@@ -46,6 +46,8 @@ from common.djangoapps.student.auth import (
     has_studio_read_access,
     has_studio_write_access,
 )
+from common.djangoapps.student.models import CourseAccessRole
+from common.djangoapps.student.roles import GlobalStaff
 from common.djangoapps.util.date_utils import get_default_time_display
 from common.djangoapps.util.json_request import JsonResponse, expect_json
 from openedx.core.djangoapps.bookmarks import api as bookmarks_api
@@ -172,6 +174,45 @@ def handle_xblock(request, usage_key_string=None):
         )
         if not access_check(request.user, usage_key.course_key):
             raise PermissionDenied()
+        
+        # Debug logging to see what's in the request
+        log.info(f"=== XBLOCK REQUEST DEBUG === method={request.method}, user={request.user.username}, usage_key={usage_key}")
+        log.info(f"request.json exists: {hasattr(request, 'json')}, request.json value: {getattr(request, 'json', None)}")
+        
+        # Check if user is trying to publish and if they have permission
+        if request.method in ("POST", "PUT", "PATCH"):
+            try:
+                publish_action = request.json.get("publish") if hasattr(request, 'json') and request.json else None
+                log.info(f"Publish action check: method={request.method}, publish={publish_action}, user={request.user.username}, is_superuser={request.user.is_superuser}")
+                
+                if publish_action == "make_public":
+                    # Global staff always have permission to publish
+                    is_global_staff = GlobalStaff().has_user(request.user)
+                    log.info(f"User {request.user.username} is_global_staff: {is_global_staff}")
+                    
+                    if not is_global_staff:
+                        # Check the user's course access role from database
+                        user_course_roles = list(CourseAccessRole.objects.filter(
+                            user=request.user,
+                            course_id=usage_key.course_key,
+                            role__in=['instructor', 'staff']
+                        ).values_list('role', flat=True))
+                        
+                        log.info(f"Publish permission check: user={request.user.username}, roles={user_course_roles}, course={usage_key.course_key}")
+                        
+                        # If user is only staff (not instructor), deny publish permission
+                        if 'staff' in user_course_roles and 'instructor' not in user_course_roles:
+                            log.warning(f"Publish DENIED for staff-only user: {request.user.username}")
+                            return JsonResponse(
+                                {
+                                    "error": _("Only instructors can publish content. Staff members do not have publish permissions.")
+                                },
+                                status=403,
+                            )
+                        else:
+                            log.info(f"Publish ALLOWED for user: {request.user.username}, roles={user_course_roles}")
+            except Exception as e:
+                log.error(f"Error checking publish permissions: {e}", exc_info=True)
 
         if request.method == "GET":
             accept_header = request.META.get("HTTP_ACCEPT", "application/json")

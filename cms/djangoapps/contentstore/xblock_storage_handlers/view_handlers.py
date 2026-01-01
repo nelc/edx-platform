@@ -186,31 +186,29 @@ def handle_xblock(request, usage_key_string=None):
                 log.info(f"Publish action check: method={request.method}, publish={publish_action}, user={request.user.username}, is_superuser={request.user.is_superuser}")
                 
                 if publish_action == "make_public":
-                    # Global staff always have permission to publish
-                    is_global_staff = GlobalStaff().has_user(request.user)
-                    log.info(f"User {request.user.username} is_global_staff: {is_global_staff}")
+                    # Check the user's course access role from database first
+                    # This check applies to all users, including GlobalStaff
+                    user_course_roles = list(CourseAccessRole.objects.filter(
+                        user=request.user,
+                        course_id=usage_key.course_key,
+                        role__in=['instructor', 'staff']
+                    ).values_list('role', flat=True))
                     
-                    if not is_global_staff:
-                        # Check the user's course access role from database
-                        user_course_roles = list(CourseAccessRole.objects.filter(
-                            user=request.user,
-                            course_id=usage_key.course_key,
-                            role__in=['instructor', 'staff']
-                        ).values_list('role', flat=True))
-                        
-                        log.info(f"Publish permission check: user={request.user.username}, roles={user_course_roles}, course={usage_key.course_key}")
-                        
-                        # If user is only staff (not instructor), deny publish permission
-                        if 'staff' in user_course_roles and 'instructor' not in user_course_roles:
-                            log.warning(f"Publish DENIED for staff-only user: {request.user.username}")
-                            return JsonResponse(
-                                {
-                                    "error": _("Only instructors can publish content. Staff members do not have publish permissions.")
-                                },
-                                status=403,
-                            )
-                        else:
-                            log.info(f"Publish ALLOWED for user: {request.user.username}, roles={user_course_roles}")
+                    is_global_staff = GlobalStaff().has_user(request.user)
+                    log.info(f"Publish permission check: user={request.user.username}, roles={user_course_roles}, is_global_staff={is_global_staff}, course={usage_key.course_key}")
+                    
+                    # If user is only staff (not instructor), deny publish permission
+                    # This applies even to GlobalStaff users
+                    if 'staff' in user_course_roles and 'instructor' not in user_course_roles:
+                        log.warning(f"Publish DENIED for staff-only user: {request.user.username} (global_staff={is_global_staff})")
+                        return JsonResponse(
+                            {
+                                "error": _("Only instructors can publish content. Staff members do not have publish permissions.")
+                            },
+                            status=403,
+                        )
+                    else:
+                        log.info(f"Publish ALLOWED for user: {request.user.username}, roles={user_course_roles}, global_staff={is_global_staff}")
             except Exception as e:
                 log.error(f"Error checking publish permissions: {e}", exc_info=True)
 

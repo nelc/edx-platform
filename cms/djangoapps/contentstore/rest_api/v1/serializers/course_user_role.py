@@ -10,4 +10,3 @@ class CourseUserRoleSerializer(serializers.Serializer):
     Serializer for the current user's role in a given course.
     """
     role = serializers.CharField(allow_null=True)
-

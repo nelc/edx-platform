@@ -56,4 +56,3 @@ class CourseUserRoleView(DeveloperErrorViewMixin, APIView):
 
         serializer = CourseUserRoleSerializer({"role": role})
         return Response(serializer.data)
-

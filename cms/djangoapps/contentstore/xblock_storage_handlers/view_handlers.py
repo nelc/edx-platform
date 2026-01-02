@@ -176,14 +176,28 @@ def handle_xblock(request, usage_key_string=None):
             raise PermissionDenied()
 
         # Debug logging to see what's in the request
-        log.info(f"=== XBLOCK REQUEST DEBUG === method={request.method}, user={request.user.username}, usage_key={usage_key}")
-        log.info(f"request.json exists: {hasattr(request, 'json')}, request.json value: {getattr(request, 'json', None)}")
+        log.info(
+            f"=== XBLOCK REQUEST DEBUG === method={request.method}, "
+            f"user={request.user.username}, usage_key={usage_key}"
+        )
+        log.info(
+            f"request.json exists: {hasattr(request, 'json')}, "
+            f"request.json value: {getattr(request, 'json', None)}"
+        )
 
         # Check if user is trying to publish and if they have permission
         if request.method in ("POST", "PUT", "PATCH"):
             try:
-                publish_action = request.json.get("publish") if hasattr(request, 'json') and request.json else None
-                log.info(f"Publish action check: method={request.method}, publish={publish_action}, user={request.user.username}, is_superuser={request.user.is_superuser}")
+                publish_action = (
+                    request.json.get("publish")
+                    if hasattr(request, 'json') and request.json
+                    else None
+                )
+                log.info(
+                    f"Publish action check: method={request.method}, "
+                    f"publish={publish_action}, user={request.user.username}, "
+                    f"is_superuser={request.user.is_superuser}"
+                )
 
                 if publish_action == "make_public":
                     # Check the user's course access role from database first
@@ -195,21 +209,35 @@ def handle_xblock(request, usage_key_string=None):
                     ).values_list('role', flat=True))
 
                     is_global_staff = GlobalStaff().has_user(request.user)
-                    log.info(f"Publish permission check: user={request.user.username}, roles={user_course_roles}, is_global_staff={is_global_staff}, course={usage_key.course_key}")
+                    log.info(
+                        f"Publish permission check: user={request.user.username}, "
+                        f"roles={user_course_roles}, "
+                        f"is_global_staff={is_global_staff}, "
+                        f"course={usage_key.course_key}"
+                    )
 
                     # If user is only staff (not instructor), deny publish permission
                     # This applies even to GlobalStaff users
                     if 'staff' in user_course_roles and 'instructor' not in user_course_roles:
-                        log.warning(f"Publish DENIED for staff-only user: {request.user.username} (global_staff={is_global_staff})")
+                        log.warning(
+                            f"Publish DENIED for staff-only user: "
+                            f"{request.user.username} (global_staff={is_global_staff})"
+                        )
                         return JsonResponse(
                             {
-                                "error": _("Only instructors can publish content. Staff members do not have publish permissions.")
+                                "error": _(
+                                    "Only instructors can publish content. "
+                                    "Staff members do not have publish permissions."
+                                )
                             },
                             status=403,
                         )
                     else:
-                        log.info(f"Publish ALLOWED for user: {request.user.username}, roles={user_course_roles}, global_staff={is_global_staff}")
-            except Exception as e:
+                        log.info(
+                            f"Publish ALLOWED for user: {request.user.username}, "
+                            f"roles={user_course_roles}, global_staff={is_global_staff}"
+                        )
+            except Exception as e:  # lint-amnesty, pylint: disable=broad-exception-caught
                 log.error(f"Error checking publish permissions: {e}", exc_info=True)
 
         if request.method == "GET":

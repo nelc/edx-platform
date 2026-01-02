@@ -174,17 +174,17 @@ def handle_xblock(request, usage_key_string=None):
         )
         if not access_check(request.user, usage_key.course_key):
             raise PermissionDenied()
-        
+
         # Debug logging to see what's in the request
         log.info(f"=== XBLOCK REQUEST DEBUG === method={request.method}, user={request.user.username}, usage_key={usage_key}")
         log.info(f"request.json exists: {hasattr(request, 'json')}, request.json value: {getattr(request, 'json', None)}")
-        
+
         # Check if user is trying to publish and if they have permission
         if request.method in ("POST", "PUT", "PATCH"):
             try:
                 publish_action = request.json.get("publish") if hasattr(request, 'json') and request.json else None
                 log.info(f"Publish action check: method={request.method}, publish={publish_action}, user={request.user.username}, is_superuser={request.user.is_superuser}")
-                
+
                 if publish_action == "make_public":
                     # Check the user's course access role from database first
                     # This check applies to all users, including GlobalStaff
@@ -193,10 +193,10 @@ def handle_xblock(request, usage_key_string=None):
                         course_id=usage_key.course_key,
                         role__in=['instructor', 'staff']
                     ).values_list('role', flat=True))
-                    
+
                     is_global_staff = GlobalStaff().has_user(request.user)
                     log.info(f"Publish permission check: user={request.user.username}, roles={user_course_roles}, is_global_staff={is_global_staff}, course={usage_key.course_key}")
-                    
+
                     # If user is only staff (not instructor), deny publish permission
                     # This applies even to GlobalStaff users
                     if 'staff' in user_course_roles and 'instructor' not in user_course_roles:

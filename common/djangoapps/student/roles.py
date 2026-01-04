@@ -566,7 +566,7 @@ def get_user_course_role(user, course_key):
     # First, check for course-specific role
     role_entry = CourseAccessRole.objects.filter(
         user=user,
-        course_id=course_key
+        course_id=course_key,
     ).first()
 
     if role_entry:

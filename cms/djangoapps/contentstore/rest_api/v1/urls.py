@@ -96,7 +96,7 @@ urlpatterns = [
     re_path(
         fr'^course_user_role/{COURSE_ID_PATTERN}$',
         CourseUserRoleView.as_view(),
-        name="course_user_role"
+        name="course_user_role",
     ),
     re_path(
         fr'^course_grading/{COURSE_ID_PATTERN}$',

@@ -158,6 +158,20 @@ def _get_block_parent_children(xblock):
 
 
 def _check_publish_permissions(request, usage_key):
+    """
+    Check if the user has permission to publish content.
+
+    This function validates that only instructors (not staff-only users) can publish
+    content. Staff members are denied publish permissions even if they are GlobalStaff.
+
+    Args:
+        request: The HTTP request object containing the publish action and user information.
+        usage_key: The usage key identifying the xblock/content being published.
+
+    Returns:
+        None if permission check passes, or JsonResponse with error message and 403 status
+        if the user lacks publish permissions.
+    """
     try:
         publish_action = (
             request.json.get("publish")

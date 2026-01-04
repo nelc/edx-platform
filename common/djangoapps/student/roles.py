@@ -576,7 +576,7 @@ def get_user_course_role(user, course_key):
     role_entry = CourseAccessRole.objects.filter(
         user=user,
         org=course_key.org,
-        course_id=CourseKeyField.Empty
+        course_id=CourseKeyField.Empty,
     ).first()
 
     return role_entry.role if role_entry else None

@@ -340,6 +340,8 @@ class UserRetirementStatus(TimeStampedModel):
         """
         Creates a UserRetirementStatus for the given user, in the correct initial state. Will
         fail if the user already has a UserRetirementStatus row or if states are not yet populated.
+        
+        Modified to include user ID in retired credentials to allow reuse of original credentials.
         """
         try:
             pending = RetirementState.objects.all().order_by('state_execution_order')[0]
@@ -349,8 +351,9 @@ class UserRetirementStatus(TimeStampedModel):
         if cls.objects.filter(user=user).exists():
             raise RetirementStateError(f'User {user} already has a retirement status row!')
 
-        retired_username = get_retired_username_by_username(user.username)
-        retired_email = get_retired_email_by_email(user.email)
+        # Include user ID to ensure uniqueness when retired credentials are reused
+        retired_username = f"retired__user_{user.id}_{user.username}"
+        retired_email = f"retired__user_{user.id}_{user.email.split('@')[0]}@retired.invalid"
 
         UserRetirementRequest.create_retirement_request(user)
 

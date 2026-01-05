@@ -234,8 +234,6 @@ def is_email_retired(email):
     This enables users to re-register with the same email after account retirement.
     The new registration will be a completely separate account with no previous data.
     """
-    log.info(f"Checking if email {email} is retired")
-    print(f"Checking if email {email} is retired")
     # Allow retired emails to be reused
     return False
 

@@ -200,7 +200,7 @@ def create_retirement_request_and_deactivate_account(user):
     """
     Adds user to retirement queue, unlinks social auth accounts, changes user passwords
     and delete tokens and activation keys
-    
+
     Modified to include user ID in retired credentials to allow reuse of original credentials.
     """
     # Add user to retirement queue.
@@ -213,7 +213,7 @@ def create_retirement_request_and_deactivate_account(user):
     # Include user ID to ensure uniqueness when retired credentials are reused
     retired_username = f"retired__user_{user.id}_{user.username}"
     retired_email = f"retired__user_{user.id}_{user.email.split('@')[0]}@retired.invalid"
-    
+
     user.username = retired_username
     user.email = retired_email
     user.set_unusable_password()

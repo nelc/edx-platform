@@ -340,7 +340,7 @@ class UserRetirementStatus(TimeStampedModel):
         """
         Creates a UserRetirementStatus for the given user, in the correct initial state. Will
         fail if the user already has a UserRetirementStatus row or if states are not yet populated.
-        
+
         Modified to include user ID in retired credentials to allow reuse of original credentials.
         """
         try:

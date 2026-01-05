@@ -210,7 +210,7 @@ def user_by_anonymous_id(uid):
 def is_username_retired(username):
     """
     Checks to see if the given username has been previously retired
-    
+
     Modified to allow retired usernames to be reused for new registrations.
     This enables users to re-register with the same username after account retirement.
     The new registration will be a completely separate account with no previous data.
@@ -229,7 +229,7 @@ def username_exists_or_retired(username):
 def is_email_retired(email):
     """
     Checks to see if the given email has been previously retired
-    
+
     Modified to allow retired emails to be reused for new registrations.
     This enables users to re-register with the same email after account retirement.
     The new registration will be a completely separate account with no previous data.

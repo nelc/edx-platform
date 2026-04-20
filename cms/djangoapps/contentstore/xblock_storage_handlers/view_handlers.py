@@ -46,6 +46,8 @@ from common.djangoapps.student.auth import (
     has_studio_read_access,
     has_studio_write_access,
 )
+from common.djangoapps.student.models import CourseAccessRole
+from common.djangoapps.student.roles import GlobalStaff
 from common.djangoapps.util.date_utils import get_default_time_display
 from common.djangoapps.util.json_request import JsonResponse, expect_json
 from openedx.core.djangoapps.bookmarks import api as bookmarks_api
@@ -155,6 +157,77 @@ def _get_block_parent_children(xblock):
     return response
 
 
+def _check_publish_permissions(request, usage_key):
+    """
+    Check if the user has permission to publish content.
+
+    This function validates that only instructors (not staff-only users) can publish
+    content. Staff members are denied publish permissions even if they are GlobalStaff.
+
+    Args:
+        request: The HTTP request object containing the publish action and user information.
+        usage_key: The usage key identifying the xblock/content being published.
+
+    Returns:
+        None if permission check passes, or JsonResponse with error message and 403 status
+        if the user lacks publish permissions.
+    """
+    try:
+        publish_action = (
+            request.json.get("publish")
+            if hasattr(request, "json") and request.json
+            else None
+        )
+        log.info(
+            f"Publish action check: method={request.method}, "
+            f"publish={publish_action}, user={request.user.username}, "
+            f"is_superuser={request.user.is_superuser}"
+        )
+
+        if publish_action == "make_public":
+            # Check the user's course access role from database first
+            # This check applies to all users, including GlobalStaff
+            user_course_roles = list(CourseAccessRole.objects.filter(
+                user=request.user,
+                course_id=usage_key.course_key,
+                role__in=["instructor", "staff"]
+            ).values_list("role", flat=True))
+
+            is_global_staff = GlobalStaff().has_user(request.user)
+            log.info(
+                f"Publish permission check: user={request.user.username}, "
+                f"roles={user_course_roles}, "
+                f"is_global_staff={is_global_staff}, "
+                f"course={usage_key.course_key}"
+            )
+
+            # If user is only staff (not instructor), deny publish permission
+            # This applies even to GlobalStaff users
+            if "staff" in user_course_roles and "instructor" not in user_course_roles:
+                log.warning(
+                    f"Publish DENIED for staff-only user: "
+                    f"{request.user.username} (global_staff={is_global_staff})"
+                )
+                return JsonResponse(
+                    {
+                        "error": _(
+                            "Only instructors can publish content. "
+                            "Staff members do not have publish permissions."
+                        )
+                    },
+                    status=403,
+                )
+            else:
+                log.info(
+                    f"Publish ALLOWED for user: {request.user.username}, "
+                    f"roles={user_course_roles}, global_staff={is_global_staff}"
+                )
+    except Exception as e:  # lint-amnesty, pylint: disable=broad-exception-caught
+        log.error(f"Error checking publish permissions: {e}", exc_info=True)
+
+    return None
+
+
 def handle_xblock(request, usage_key_string=None):
     """
     Service method with all business logic for handling xblock requests.
@@ -172,6 +245,22 @@ def handle_xblock(request, usage_key_string=None):
         )
         if not access_check(request.user, usage_key.course_key):
             raise PermissionDenied()
+
+        # Debug logging to see what's in the request
+        log.info(
+            f"=== XBLOCK REQUEST DEBUG === method={request.method}, "
+            f"user={request.user.username}, usage_key={usage_key}"
+        )
+        log.info(
+            f"request.json exists: {hasattr(request, 'json')}, "
+            f"request.json value: {getattr(request, 'json', None)}"
+        )
+
+        # Check if user is trying to publish and if they have permission
+        if request.method in ("POST", "PUT", "PATCH"):
+            permission_response = _check_publish_permissions(request, usage_key)
+            if permission_response:
+                return permission_response
 
         if request.method == "GET":
             accept_header = request.META.get("HTTP_ACCEPT", "application/json")

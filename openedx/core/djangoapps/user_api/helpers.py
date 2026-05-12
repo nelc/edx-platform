@@ -2,8 +2,6 @@
 Helper functions for the account/profile Python APIs.
 This is NOT part of the public API.
 """
-
-
 import json
 import logging
 import traceback
@@ -12,11 +10,32 @@ from functools import wraps
 
 from django import forms
 from django.conf import settings
+from django.core.cache import cache
 from django.core.serializers.json import DjangoJSONEncoder
 from django.utils.encoding import force_str
 from django.utils.functional import Promise
 
 LOGGER = logging.getLogger(__name__)
+
+USER_PREFERENCE_CACHE_TIMEOUT = getattr(settings, 'USER_PREFERENCE_CACHE_TIMEOUT', 5 * 60)
+USER_PREFERENCE_CACHE_KEY_PREFIX = getattr(settings, 'USER_PREFERENCE_CACHE_KEY_PREFIX', 'user_preferences')
+
+
+def user_preferences_cache_key(user_id):
+    return f"{USER_PREFERENCE_CACHE_KEY_PREFIX}.{user_id}"
+
+
+def get_cached_preferences(user):
+    """Return the cached preferences dict for a user, or None on a cache miss."""
+    return cache.get(user_preferences_cache_key(user.id))
+
+
+def set_cached_preferences(user, preferences):
+    cache.set(user_preferences_cache_key(user.id), preferences, USER_PREFERENCE_CACHE_TIMEOUT)
+
+
+def invalidate_user_preferences_cache(user):
+    cache.delete(user_preferences_cache_key(user.id))
 
 
 def intercept_errors(api_error, ignore_errors=None):

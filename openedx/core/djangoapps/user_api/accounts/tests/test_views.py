@@ -232,7 +232,7 @@ class TestOwnUsernameAPI(FilteredQueryCountMixin, CacheIsolationTestCase, UserAP
         Test that a client (logged in) can get her own username.
         """
         self.client.login(username=self.user.username, password=TEST_PASSWORD)
-        self._verify_get_own_username(18)
+        self._verify_get_own_username(17)
 
     def test_get_username_inactive(self):
         """
@@ -242,7 +242,7 @@ class TestOwnUsernameAPI(FilteredQueryCountMixin, CacheIsolationTestCase, UserAP
         self.client.login(username=self.user.username, password=TEST_PASSWORD)
         self.user.is_active = False
         self.user.save()
-        self._verify_get_own_username(18)
+        self._verify_get_own_username(17)
 
     def test_get_username_not_logged_in(self):
         """
@@ -358,7 +358,7 @@ class TestAccountsAPI(FilteredQueryCountMixin, CacheIsolationTestCase, UserAPITe
     """
 
     ENABLED_CACHES = ['default']
-    TOTAL_QUERY_COUNT = 26
+    TOTAL_QUERY_COUNT = 25
     FULL_RESPONSE_FIELD_COUNT = 29
 
     def setUp(self):
@@ -811,12 +811,12 @@ class TestAccountsAPI(FilteredQueryCountMixin, CacheIsolationTestCase, UserAPITe
             assert data['time_zone'] is None
 
         self.client.login(username=self.user.username, password=TEST_PASSWORD)
-        verify_get_own_information(self._get_num_queries(24))
+        verify_get_own_information(self._get_num_queries(23))
 
         # Now make sure that the user can get the same information, even if not active
         self.user.is_active = False
         self.user.save()
-        verify_get_own_information(self._get_num_queries(16))
+        verify_get_own_information(self._get_num_queries(14))
 
     def test_get_account_empty_string(self):
         """
@@ -831,7 +831,7 @@ class TestAccountsAPI(FilteredQueryCountMixin, CacheIsolationTestCase, UserAPITe
         legacy_profile.save()
 
         self.client.login(username=self.user.username, password=TEST_PASSWORD)
-        with self.assertNumQueries(self._get_num_queries(24), table_ignorelist=WAFFLE_TABLES):
+        with self.assertNumQueries(self._get_num_queries(23), table_ignorelist=WAFFLE_TABLES):
             response = self.send_get(self.client)
         for empty_field in ("level_of_education", "gender", "country", "state", "bio",):
             assert response.data[empty_field] is None

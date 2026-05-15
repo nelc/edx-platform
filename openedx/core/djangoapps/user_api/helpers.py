@@ -22,19 +22,58 @@ USER_PREFERENCE_CACHE_KEY_PREFIX = getattr(settings, 'USER_PREFERENCE_CACHE_KEY_
 
 
 def user_preferences_cache_key(user_id):
+    """
+    Generate a unique cache key for a specific user's preferences.
+
+    Args:
+        user_id (int|str): The unique identifier of the user.
+
+    Returns:
+        str: A formatted cache key string.
+    """
     return f"{USER_PREFERENCE_CACHE_KEY_PREFIX}.{user_id}"
 
 
 def get_cached_preferences(user):
-    """Return the cached preferences dict for a user, or None on a cache miss."""
+    """
+    Retrieve the cached preferences dictionary for a given user.
+
+    Args:
+        user (User): The user object whose preferences are being requested.
+
+    Returns:
+        dict|None: The cached preferences if found, otherwise None on a cache miss.
+    """
     return cache.get(user_preferences_cache_key(user.id))
 
 
 def set_cached_preferences(user, preferences):
+    """
+    Store the user's preferences in the cache.
+
+    Args:
+        user (User): The user object associated with the preferences.
+        preferences (dict): A dictionary containing the user's preference settings.
+
+    Returns:
+        None
+    """
     cache.set(user_preferences_cache_key(user.id), preferences, USER_PREFERENCE_CACHE_TIMEOUT)
 
 
 def invalidate_user_preferences_cache(user):
+    """
+    Remove the cached preferences for a specific user.
+
+    This should be called whenever user preferences are updated to ensure
+    cache consistency.
+
+    Args:
+        user (User): The user object whose cache entry needs to be deleted.
+
+    Returns:
+        None
+    """
     cache.delete(user_preferences_cache_key(user.id))
 
 

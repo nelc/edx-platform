@@ -325,6 +325,7 @@ class IndexQueryTestCase(ModuleStoreTestCase):
     Tests for query count.
     """
     NUM_PROBLEMS = 20
+    ENABLED_CACHES = ['default']
 
     def test_index_query_counts(self):
         # TODO: decrease query count as part of REVO-28
@@ -341,7 +342,7 @@ class IndexQueryTestCase(ModuleStoreTestCase):
         self.client.login(username=self.user.username, password=self.user_password)
         CourseEnrollment.enroll(self.user, course.id)
 
-        with self.assertNumQueries(152, table_ignorelist=QUERY_COUNT_TABLE_IGNORELIST):
+        with self.assertNumQueries(149, table_ignorelist=QUERY_COUNT_TABLE_IGNORELIST):
             with check_mongo_calls(3):
                 url = reverse(
                     'courseware_section',
@@ -1472,8 +1473,8 @@ class ProgressPageTests(ProgressPageBaseTests):
             self.assertContains(resp, "earned a certificate for this course.")
 
     @ddt.data(
-        (True, 54),
-        (False, 54),
+        (True, 52),
+        (False, 52),
     )
     @ddt.unpack
     def test_progress_queries_paced_courses(self, self_paced, query_count):
@@ -1488,13 +1489,13 @@ class ProgressPageTests(ProgressPageBaseTests):
         ContentTypeGatingConfig.objects.create(enabled=True, enabled_as_of=datetime(2018, 1, 1))
         self.setup_course()
         with self.assertNumQueries(
-            54, table_ignorelist=QUERY_COUNT_TABLE_IGNORELIST
+            52, table_ignorelist=QUERY_COUNT_TABLE_IGNORELIST
         ), check_mongo_calls(2):
             self._get_progress_page()
 
         for _ in range(2):
             with self.assertNumQueries(
-                39, table_ignorelist=QUERY_COUNT_TABLE_IGNORELIST
+                36, table_ignorelist=QUERY_COUNT_TABLE_IGNORELIST
             ), check_mongo_calls(2):
                 self._get_progress_page()
 

@@ -6,7 +6,7 @@ API for managing user preferences.
 import logging
 
 from django.conf import settings
-from django.core.cache import cache
+
 from django.core.exceptions import ObjectDoesNotExist
 from django.db import IntegrityError
 from django.utils.translation import gettext as _
@@ -27,31 +27,11 @@ from ..errors import (  # lint-amnesty, pylint: disable=unused-import
     UserNotAuthorized,
     UserNotFound
 )
-from ..helpers import intercept_errors, serializer_is_dirty
+from ..helpers import intercept_errors, invalidate_user_preferences_cache, serializer_is_dirty
 from ..models import UserOrgTag, UserPreference
 from ..serializers import RawUserPreferenceSerializer
 
 log = logging.getLogger(__name__)
-
-USER_PREFERENCE_CACHE_TIMEOUT = getattr(settings, 'USER_PREFERENCE_CACHE_TIMEOUT', 5 * 60)
-USER_PREFERENCE_CACHE_KEY_PREFIX = getattr(settings, 'USER_PREFERENCE_CACHE_KEY_PREFIX', 'user_preferences')
-
-
-def _user_preferences_cache_key(user_id):
-    return f"{USER_PREFERENCE_CACHE_KEY_PREFIX}.{user_id}"
-
-
-def _get_cached_preferences(user):
-    """Return the cached preferences dict for a user, or None on a cache miss."""
-    return cache.get(_user_preferences_cache_key(user.id))
-
-
-def _set_cached_preferences(user, preferences):
-    cache.set(_user_preferences_cache_key(user.id), preferences, USER_PREFERENCE_CACHE_TIMEOUT)
-
-
-def _invalidate_user_preferences_cache(user):
-    cache.delete(_user_preferences_cache_key(user.id))
 
 
 @intercept_errors(UserAPIInternalError, ignore_errors=[UserAPIRequestError])
@@ -76,11 +56,8 @@ def has_user_preference(requesting_user, preference_key, username=None):
          UserAPIInternalError: the operation failed due to an unexpected error.
     """
     existing_user = _get_authorized_user(requesting_user, username, allow_staff=True)
-    cached = _get_cached_preferences(existing_user)
-    if cached is None:
-        cached = UserPreference.get_all_preferences(existing_user)
-        _set_cached_preferences(existing_user, cached)
-    return preference_key in cached
+    preferences = UserPreference.get_all_preferences(existing_user)
+    return preference_key in preferences
 
 
 @intercept_errors(UserAPIInternalError, ignore_errors=[UserAPIRequestError])
@@ -105,11 +82,8 @@ def get_user_preference(requesting_user, preference_key, username=None):
          UserAPIInternalError: the operation failed due to an unexpected error.
     """
     existing_user = _get_authorized_user(requesting_user, username, allow_staff=True)
-    cached = _get_cached_preferences(existing_user)
-    if cached is None:
-        cached = UserPreference.get_all_preferences(existing_user)
-        _set_cached_preferences(existing_user, cached)
-    return cached.get(preference_key)
+    preferences = UserPreference.get_all_preferences(existing_user)
+    return preferences.get(preference_key)
 
 
 @intercept_errors(UserAPIInternalError, ignore_errors=[UserAPIRequestError])
@@ -132,12 +106,7 @@ def get_user_preferences(requesting_user, username=None):
          UserAPIInternalError: the operation failed due to an unexpected error.
     """
     existing_user = _get_authorized_user(requesting_user, username, allow_staff=True)
-    cached = _get_cached_preferences(existing_user)
-    if cached is not None:
-        return cached
-    preferences = UserPreference.get_all_preferences(existing_user)
-    _set_cached_preferences(existing_user, preferences)
-    return preferences
+    return UserPreference.get_all_preferences(existing_user)
 
 
 @intercept_errors(UserAPIInternalError, ignore_errors=[UserAPIRequestError])
@@ -205,7 +174,7 @@ def update_user_preferences(requesting_user, update, user=None):
                 raise _create_preference_update_error(preference_key, preference_value, error)  # lint-amnesty, pylint: disable=raise-missing-from
         else:
             delete_user_preference(requesting_user, preference_key)
-    _invalidate_user_preferences_cache(user)
+    invalidate_user_preferences_cache(user)
 
 
 @intercept_errors(UserAPIInternalError, ignore_errors=[UserAPIRequestError])
@@ -244,7 +213,7 @@ def set_user_preference(requesting_user, preference_key, preference_value, usern
             serializer.save()
         except Exception as error:
             raise _create_preference_update_error(preference_key, preference_value, error)  # lint-amnesty, pylint: disable=raise-missing-from
-        _invalidate_user_preferences_cache(existing_user)
+        invalidate_user_preferences_cache(existing_user)
 
 
 @intercept_errors(UserAPIInternalError, ignore_errors=[UserAPIRequestError])
@@ -290,7 +259,7 @@ def delete_user_preference(requesting_user, preference_key, username=None):
                 preference_key=preference_key
             ),
         )
-    _invalidate_user_preferences_cache(existing_user)
+    invalidate_user_preferences_cache(existing_user)
     return True
 
 

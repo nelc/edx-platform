@@ -331,7 +331,7 @@ class CertificatesListRestApiTest(AuthAndScopesTestMixin, SharedModuleStoreTestC
             assert len(resp.data) == 0
 
         # Test student with 1 certificate
-        with self.assertNumQueries(13, table_ignorelist=WAFFLE_TABLES):
+        with self.assertNumQueries(12, table_ignorelist=WAFFLE_TABLES):
             resp = self.get_response(
                 AuthType.jwt,
                 requesting_user=self.global_staff,
@@ -371,7 +371,7 @@ class CertificatesListRestApiTest(AuthAndScopesTestMixin, SharedModuleStoreTestC
             download_url='www.google.com',
             grade="0.88",
         )
-        with self.assertNumQueries(13, table_ignorelist=WAFFLE_TABLES):
+        with self.assertNumQueries(12, table_ignorelist=WAFFLE_TABLES):
             resp = self.get_response(
                 AuthType.jwt,
                 requesting_user=self.global_staff,

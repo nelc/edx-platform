@@ -23,7 +23,7 @@ from opaque_keys.edx.django.models import CourseKeyField
 # create an alias in "user_api".
 
 from openedx.core.djangolib.model_mixins import DeletableByUserValue
-from openedx.core.lib.cache_utils import request_cached
+from openedx.core.djangoapps.user_api.helpers import get_cached_preferences, set_cached_preferences
 # pylint: disable=unused-import
 from common.djangoapps.student.models import (
     get_retired_email_by_email,
@@ -55,14 +55,19 @@ class UserPreference(models.Model):
         unique_together = ("user", "key")
 
     @staticmethod
-    @request_cached()
     def get_all_preferences(user):
         """
         Gets all preferences for a given user
 
         Returns: Set of (preference type, value) pairs for each of the user's preferences
         """
-        return {pref.key: pref.value for pref in user.preferences.all()}
+        preferences = get_cached_preferences(user)
+
+        if preferences is None:
+            preferences = {pref.key: pref.value for pref in user.preferences.all()}
+            set_cached_preferences(user, preferences)
+
+        return preferences
 
     @classmethod
     def get_value(cls, user, preference_key, default=None):

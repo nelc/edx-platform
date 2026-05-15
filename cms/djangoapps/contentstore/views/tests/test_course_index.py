@@ -432,13 +432,13 @@ class TestCourseIndexArchived(CourseTestCase):
 
     @ddt.data(
         # Staff user has course staff access
-        (True, 'staff', None, 23),
-        (False, 'staff', None, 23),
+        (True, 'staff', None, 22),
+        (False, 'staff', None, 22),
         # Base user has global staff access
-        (True, 'user', ORG, 23),
-        (False, 'user', ORG, 23),
-        (True, 'user', None, 23),
-        (False, 'user', None, 23),
+        (True, 'user', ORG, 22),
+        (False, 'user', ORG, 22),
+        (True, 'user', None, 22),
+        (False, 'user', None, 22),
     )
     @ddt.unpack
     def test_separate_archived_courses(self, separate_archived_courses, username, org, sql_queries):
@@ -462,13 +462,13 @@ class TestCourseIndexArchived(CourseTestCase):
 
     @ddt.data(
         # Staff user has course staff access
-        (True, 'staff', None, 23),
-        (False, 'staff', None, 23),
+        (True, 'staff', None, 22),
+        (False, 'staff', None, 22),
         # Base user has global staff access
-        (True, 'user', ORG, 23),
-        (False, 'user', ORG, 23),
-        (True, 'user', None, 23),
-        (False, 'user', None, 23),
+        (True, 'user', ORG, 22),
+        (False, 'user', ORG, 22),
+        (True, 'user', None, 22),
+        (False, 'user', None, 22),
     )
     @ddt.unpack
     def test_separate_archived_courses_with_home_page_course_v2_api(
@@ -715,7 +715,7 @@ class TestCourseOutline(CourseTestCase):
         """
         Test to check number of queries made to mysql and mongo
         """
-        with self.assertNumQueries(38, table_ignorelist=WAFFLE_TABLES):
+        with self.assertNumQueries(37, table_ignorelist=WAFFLE_TABLES):
             with check_mongo_calls(3):
                 self.client.get_html(reverse_course_url('course_handler', self.course.id))
 

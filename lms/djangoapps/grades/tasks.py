@@ -126,12 +126,10 @@ def compute_grades_for_course(course_key, start_id, batch_size, **kwargs):  # py
         log.info("Attempted compute_grades_for_course for course '%s', but grades are frozen.", course_key)
         return
 
-    enrollments = (
-        CourseEnrollment.objects
-        .filter(course_id=course_key, id__gte=start_id)
-        .select_related('user')
-        .order_by('id')[:batch_size]
-    )
+    enrollments = CourseEnrollment.objects.filter(
+        course_id=course_key,
+        id__gte=start_id,
+    ).select_related('user').order_by('id')[:batch_size]
     student_iter = (enrollment.user for enrollment in enrollments)
 
     for result in CourseGradeFactory().iter(users=student_iter, course_key=course_key, force_update=True):
@@ -384,6 +382,5 @@ def _course_task_args(course_key, **kwargs):
     else:
         batch_size = ComputeGradesSetting.current().batch_size
 
-    for i in range(0, total_count, batch_size):
-        start_id = enrollment_ids[i]
-        yield (str(course_key), start_id, batch_size)
+    for batch_start_id in enrollment_ids[::batch_size]:
+        yield (str(course_key), batch_start_id, batch_size)

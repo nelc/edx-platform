@@ -175,7 +175,7 @@ class LoginAndRegistrationTest(ThirdPartyAuthTestMixin, UrlResetMixin, ModuleSto
         params = [
             ('course_id', 'edX/DemoX/Demo_Course'),
             ('enrollment_action', 'enroll'),
-            ('course_mode', CourseMode.DEFAULT_MODE_SLUG),
+            ('course_mode', CourseMode.get_default_mode_slug()),
             ('email_opt_in', 'true'),
             ('next', '/custom/final/destination')
         ]
@@ -228,7 +228,7 @@ class LoginAndRegistrationTest(ThirdPartyAuthTestMixin, UrlResetMixin, ModuleSto
         params = [
             ('course_id', 'course-v1:Org+Course+Run'),
             ('enrollment_action', 'enroll'),
-            ('course_mode', CourseMode.DEFAULT_MODE_SLUG),
+            ('course_mode', CourseMode.get_default_mode_slug()),
             ('email_opt_in', 'true'),
             ('next', '/custom/final/destination'),
         ]

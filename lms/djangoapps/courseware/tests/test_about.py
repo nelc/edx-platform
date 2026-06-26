@@ -62,8 +62,8 @@ class AboutTestCase(LoginEnrollmentTestCase, SharedModuleStoreTestCase, EventTra
 
         self.course_mode = CourseMode(
             course_id=self.purchase_course.id,
-            mode_slug=CourseMode.DEFAULT_MODE_SLUG,
-            mode_display_name=CourseMode.DEFAULT_MODE_SLUG,
+            mode_slug=CourseMode.get_default_mode_slug(),
+            mode_display_name=CourseMode.get_default_mode_slug(),
             min_price=10
         )
         self.course_mode.save()

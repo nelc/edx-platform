@@ -412,7 +412,7 @@ class CourseRetrieveUpdateViewTests(CourseApiViewTestMixin, ModuleStoreTestCase)
 
         expected_modes = [
             CourseMode(
-                mode_slug=CourseMode.DEFAULT_MODE_SLUG,
+                mode_slug=CourseMode.get_default_mode_slug(),
                 min_price=150, currency='USD',
                 sku='ABC123',
                 bulk_sku='BULK-ABC123'

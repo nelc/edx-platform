@@ -64,7 +64,7 @@ class BasketsView(APIView):
 
         return True, course_key, None
 
-    def _enroll(self, course_key, user, mode=CourseMode.DEFAULT_MODE_SLUG):
+    def _enroll(self, course_key, user, mode=CourseMode.get_default_mode_slug()):
         """ Enroll the user in the course. """
         add_enrollment(user.username, str(course_key), mode)
 

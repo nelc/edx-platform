@@ -62,7 +62,7 @@ class EnrollmentTestMixin:
             expected_status=status.HTTP_200_OK,
             email_opt_in=None,
             as_server=False,
-            mode=CourseMode.DEFAULT_MODE_SLUG,
+            mode=CourseMode.get_default_mode_slug(),
             is_active=None,
             enrollment_attributes=None,
             min_mongo_calls=0,
@@ -207,12 +207,12 @@ class EnrollmentTest(EnrollmentTestMixin, ModuleStoreTestCase, APITestCase, Ente
     @ddt.data(
         # Default (no course modes in the database)
         # Expect that users are automatically enrolled as the default
-        ([], CourseMode.DEFAULT_MODE_SLUG),
+        ([], CourseMode.get_default_mode_slug()),
 
         # Audit / Verified
         # We should always go to the "choose your course" page.
         # We should also be enrolled as the default.
-        ([CourseMode.VERIFIED, CourseMode.AUDIT], CourseMode.DEFAULT_MODE_SLUG),
+        ([CourseMode.VERIFIED, CourseMode.AUDIT], CourseMode.get_default_mode_slug()),
     )
     @ddt.unpack
     def test_enroll(self, course_modes, enrollment_mode):
@@ -415,8 +415,8 @@ class EnrollmentTest(EnrollmentTestMixin, ModuleStoreTestCase, APITestCase, Ente
     def test_check_enrollment(self):
         CourseModeFactory.create(
             course_id=self.course.id,
-            mode_slug=CourseMode.DEFAULT_MODE_SLUG,
-            mode_display_name=CourseMode.DEFAULT_MODE_SLUG,
+            mode_slug=CourseMode.get_default_mode_slug(),
+            mode_display_name=CourseMode.get_default_mode_slug(),
         )
         # Create an enrollment
         self.assert_enrollment_status()
@@ -430,7 +430,7 @@ class EnrollmentTest(EnrollmentTestMixin, ModuleStoreTestCase, APITestCase, Ente
         data = json.loads(resp.content.decode('utf-8'))
         assert str(self.course.id) == data['course_details']['course_id']
         assert self.course.display_name_with_default == data['course_details']['course_name']
-        assert CourseMode.DEFAULT_MODE_SLUG == data['mode']
+        assert CourseMode.get_default_mode_slug() == data['mode']
         assert data['is_active']
 
     @ddt.data(
@@ -479,8 +479,8 @@ class EnrollmentTest(EnrollmentTestMixin, ModuleStoreTestCase, APITestCase, Ente
     def test_user_not_specified(self):
         CourseModeFactory.create(
             course_id=self.course.id,
-            mode_slug=CourseMode.DEFAULT_MODE_SLUG,
-            mode_display_name=CourseMode.DEFAULT_MODE_SLUG,
+            mode_slug=CourseMode.get_default_mode_slug(),
+            mode_display_name=CourseMode.get_default_mode_slug(),
         )
         # Create an enrollment
         self.assert_enrollment_status()
@@ -490,7 +490,7 @@ class EnrollmentTest(EnrollmentTestMixin, ModuleStoreTestCase, APITestCase, Ente
         assert resp.status_code == status.HTTP_200_OK
         data = json.loads(resp.content.decode('utf-8'))
         assert str(self.course.id) == data['course_details']['course_id']
-        assert CourseMode.DEFAULT_MODE_SLUG == data['mode']
+        assert CourseMode.get_default_mode_slug() == data['mode']
         assert data['is_active']
 
     def test_user_not_authenticated(self):
@@ -527,8 +527,8 @@ class EnrollmentTest(EnrollmentTestMixin, ModuleStoreTestCase, APITestCase, Ente
         # Try to enroll a user that is not the authenticated user.
         CourseModeFactory.create(
             course_id=self.course.id,
-            mode_slug=CourseMode.DEFAULT_MODE_SLUG,
-            mode_display_name=CourseMode.DEFAULT_MODE_SLUG,
+            mode_slug=CourseMode.get_default_mode_slug(),
+            mode_display_name=CourseMode.get_default_mode_slug(),
         )
         self.assert_enrollment_status(username=self.other_user.username, expected_status=status.HTTP_404_NOT_FOUND)
         # Verify that the server still has access to this endpoint.
@@ -561,8 +561,8 @@ class EnrollmentTest(EnrollmentTestMixin, ModuleStoreTestCase, APITestCase, Ente
         for course in self.course, other_course:
             CourseModeFactory.create(
                 course_id=str(course.id),
-                mode_slug=CourseMode.DEFAULT_MODE_SLUG,
-                mode_display_name=CourseMode.DEFAULT_MODE_SLUG,
+                mode_slug=CourseMode.get_default_mode_slug(),
+                mode_display_name=CourseMode.get_default_mode_slug(),
             )
             self.assert_enrollment_status(
                 course_id=str(course.id),
@@ -755,8 +755,8 @@ class EnrollmentTest(EnrollmentTestMixin, ModuleStoreTestCase, APITestCase, Ente
         self.rate_limit_config.save()
         CourseModeFactory.create(
             course_id=self.course.id,
-            mode_slug=CourseMode.DEFAULT_MODE_SLUG,
-            mode_display_name=CourseMode.DEFAULT_MODE_SLUG,
+            mode_slug=CourseMode.get_default_mode_slug(),
+            mode_display_name=CourseMode.get_default_mode_slug(),
         )
 
         for attempt in range(self.rate_limit + 2):
@@ -858,7 +858,7 @@ class EnrollmentTest(EnrollmentTestMixin, ModuleStoreTestCase, APITestCase, Ente
     def test_update_enrollment_with_mode(self):
         """With the right API key, update an existing enrollment with a new mode. """
         # Create an honor and verified mode for a course. This allows an update.
-        for mode in [CourseMode.DEFAULT_MODE_SLUG, CourseMode.VERIFIED]:
+        for mode in [CourseMode.get_default_mode_slug(), CourseMode.VERIFIED]:
             CourseModeFactory.create(
                 course_id=self.course.id,
                 mode_slug=mode,
@@ -872,7 +872,7 @@ class EnrollmentTest(EnrollmentTestMixin, ModuleStoreTestCase, APITestCase, Ente
         assert CourseEnrollment.is_enrolled(self.user, self.course.id)
         course_mode, is_active = CourseEnrollment.enrollment_mode_for_user(self.user, self.course.id)
         assert is_active
-        assert course_mode == CourseMode.DEFAULT_MODE_SLUG
+        assert course_mode == CourseMode.get_default_mode_slug()
 
         # Check that the enrollment upgraded to verified.
         self.assert_enrollment_status(as_server=True, mode=CourseMode.VERIFIED, expected_status=status.HTTP_200_OK)
@@ -884,7 +884,7 @@ class EnrollmentTest(EnrollmentTestMixin, ModuleStoreTestCase, APITestCase, Ente
         """With the right API key, update an existing enrollment with credit
         mode and set enrollment attributes.
         """
-        for mode in [CourseMode.DEFAULT_MODE_SLUG, CourseMode.CREDIT_MODE]:
+        for mode in [CourseMode.get_default_mode_slug(), CourseMode.CREDIT_MODE]:
             CourseModeFactory.create(
                 course_id=self.course.id,
                 mode_slug=mode,
@@ -898,7 +898,7 @@ class EnrollmentTest(EnrollmentTestMixin, ModuleStoreTestCase, APITestCase, Ente
         assert CourseEnrollment.is_enrolled(self.user, self.course.id)
         course_mode, is_active = CourseEnrollment.enrollment_mode_for_user(self.user, self.course.id)
         assert is_active
-        assert course_mode == CourseMode.DEFAULT_MODE_SLUG
+        assert course_mode == CourseMode.get_default_mode_slug()
 
         # Check that the enrollment upgraded to credit.
         enrollment_attributes = [{
@@ -920,7 +920,7 @@ class EnrollmentTest(EnrollmentTestMixin, ModuleStoreTestCase, APITestCase, Ente
         """Check response status is bad request when invalid enrollment
         attributes are passed
         """
-        for mode in [CourseMode.DEFAULT_MODE_SLUG, CourseMode.CREDIT_MODE]:
+        for mode in [CourseMode.get_default_mode_slug(), CourseMode.CREDIT_MODE]:
             CourseModeFactory.create(
                 course_id=self.course.id,
                 mode_slug=mode,
@@ -934,7 +934,7 @@ class EnrollmentTest(EnrollmentTestMixin, ModuleStoreTestCase, APITestCase, Ente
         assert CourseEnrollment.is_enrolled(self.user, self.course.id)
         course_mode, is_active = CourseEnrollment.enrollment_mode_for_user(self.user, self.course.id)
         assert is_active
-        assert course_mode == CourseMode.DEFAULT_MODE_SLUG
+        assert course_mode == CourseMode.get_default_mode_slug()
 
         # Check that the enrollment upgraded to credit.
         enrollment_attributes = [{
@@ -950,12 +950,12 @@ class EnrollmentTest(EnrollmentTestMixin, ModuleStoreTestCase, APITestCase, Ente
         )
         course_mode, is_active = CourseEnrollment.enrollment_mode_for_user(self.user, self.course.id)
         assert is_active
-        assert course_mode == CourseMode.DEFAULT_MODE_SLUG
+        assert course_mode == CourseMode.get_default_mode_slug()
 
     def test_downgrade_enrollment_with_mode(self):
         """With the right API key, downgrade an existing enrollment with a new mode. """
         # Create an honor and verified mode for a course. This allows an update.
-        for mode in [CourseMode.DEFAULT_MODE_SLUG, CourseMode.VERIFIED]:
+        for mode in [CourseMode.get_default_mode_slug(), CourseMode.VERIFIED]:
             CourseModeFactory.create(
                 course_id=self.course.id,
                 mode_slug=mode,
@@ -974,17 +974,17 @@ class EnrollmentTest(EnrollmentTestMixin, ModuleStoreTestCase, APITestCase, Ente
         # Check that the enrollment was downgraded to the default mode.
         self.assert_enrollment_status(
             as_server=True,
-            mode=CourseMode.DEFAULT_MODE_SLUG,
+            mode=CourseMode.get_default_mode_slug(),
             expected_status=status.HTTP_200_OK
         )
         course_mode, is_active = CourseEnrollment.enrollment_mode_for_user(self.user, self.course.id)
         assert is_active
-        assert course_mode == CourseMode.DEFAULT_MODE_SLUG
+        assert course_mode == CourseMode.get_default_mode_slug()
 
     @ddt.data(
-        ((CourseMode.DEFAULT_MODE_SLUG, ), CourseMode.DEFAULT_MODE_SLUG),
-        ((CourseMode.DEFAULT_MODE_SLUG, CourseMode.VERIFIED), CourseMode.DEFAULT_MODE_SLUG),
-        ((CourseMode.DEFAULT_MODE_SLUG, CourseMode.VERIFIED), CourseMode.VERIFIED),
+        ((CourseMode.get_default_mode_slug(), ), CourseMode.get_default_mode_slug()),
+        ((CourseMode.get_default_mode_slug(), CourseMode.VERIFIED), CourseMode.get_default_mode_slug()),
+        ((CourseMode.get_default_mode_slug(), CourseMode.VERIFIED), CourseMode.VERIFIED),
         ((CourseMode.PROFESSIONAL, ), CourseMode.PROFESSIONAL),
         ((CourseMode.NO_ID_PROFESSIONAL_MODE, ), CourseMode.NO_ID_PROFESSIONAL_MODE),
         ((CourseMode.VERIFIED, CourseMode.CREDIT_MODE), CourseMode.VERIFIED),
@@ -1028,7 +1028,7 @@ class EnrollmentTest(EnrollmentTestMixin, ModuleStoreTestCase, APITestCase, Ente
         # in which the default mode doesn't exist.
         expected_status = (
             status.HTTP_200_OK
-            if CourseMode.DEFAULT_MODE_SLUG in configured_modes
+            if CourseMode.get_default_mode_slug() in configured_modes
             else status.HTTP_400_BAD_REQUEST
         )
         self.assert_enrollment_status(
@@ -1087,7 +1087,7 @@ class EnrollmentTest(EnrollmentTestMixin, ModuleStoreTestCase, APITestCase, Ente
     def test_change_mode_from_user(self):
         """Users should not be able to alter the enrollment mode on an enrollment. """
         # Create a default and a verified mode for a course. This allows an update.
-        for mode in [CourseMode.DEFAULT_MODE_SLUG, CourseMode.VERIFIED]:
+        for mode in [CourseMode.get_default_mode_slug(), CourseMode.VERIFIED]:
             CourseModeFactory.create(
                 course_id=self.course.id,
                 mode_slug=mode,
@@ -1101,13 +1101,13 @@ class EnrollmentTest(EnrollmentTestMixin, ModuleStoreTestCase, APITestCase, Ente
         assert CourseEnrollment.is_enrolled(self.user, self.course.id)
         course_mode, is_active = CourseEnrollment.enrollment_mode_for_user(self.user, self.course.id)
         assert is_active
-        assert course_mode == CourseMode.DEFAULT_MODE_SLUG
+        assert course_mode == CourseMode.get_default_mode_slug()
 
         # Get a 403 response when trying to upgrade yourself.
         self.assert_enrollment_status(mode=CourseMode.VERIFIED, expected_status=status.HTTP_403_FORBIDDEN)
         course_mode, is_active = CourseEnrollment.enrollment_mode_for_user(self.user, self.course.id)
         assert is_active
-        assert course_mode == CourseMode.DEFAULT_MODE_SLUG
+        assert course_mode == CourseMode.get_default_mode_slug()
 
     @ddt.data(*itertools.product(
         (CourseMode.HONOR, CourseMode.VERIFIED),
@@ -1175,12 +1175,12 @@ class EnrollmentTest(EnrollmentTestMixin, ModuleStoreTestCase, APITestCase, Ente
 
     @ddt.data(
         (True, CourseMode.VERIFIED),
-        (False, CourseMode.DEFAULT_MODE_SLUG)
+        (False, CourseMode.get_default_mode_slug())
     )
     @ddt.unpack
     def test_update_enrollment_with_expired_mode(self, using_api_key, updated_mode):
         """Verify that if verified mode is expired than it's enrollment cannot be updated. """
-        for mode in [CourseMode.DEFAULT_MODE_SLUG, CourseMode.VERIFIED]:
+        for mode in [CourseMode.get_default_mode_slug(), CourseMode.VERIFIED]:
             CourseModeFactory.create(
                 course_id=self.course.id,
                 mode_slug=mode,
@@ -1194,7 +1194,7 @@ class EnrollmentTest(EnrollmentTestMixin, ModuleStoreTestCase, APITestCase, Ente
         assert CourseEnrollment.is_enrolled(self.user, self.course.id)
         course_mode, is_active = CourseEnrollment.enrollment_mode_for_user(self.user, self.course.id)
         assert is_active
-        assert course_mode == CourseMode.DEFAULT_MODE_SLUG
+        assert course_mode == CourseMode.get_default_mode_slug()
 
         # Change verified mode expiration.
         mode = CourseMode.objects.get(course_id=self.course.id, mode_slug=CourseMode.VERIFIED)
@@ -1256,8 +1256,8 @@ class EnrollmentTest(EnrollmentTestMixin, ModuleStoreTestCase, APITestCase, Ente
         )
         CourseModeFactory.create(
             course_id=self.course.id,
-            mode_slug=CourseMode.DEFAULT_MODE_SLUG,
-            mode_display_name=CourseMode.DEFAULT_MODE_SLUG,
+            mode_slug=CourseMode.get_default_mode_slug(),
+            mode_display_name=CourseMode.get_default_mode_slug(),
         )
         consent_kwargs = {
             'username': self.user.username,
@@ -1282,7 +1282,7 @@ class EnrollmentTest(EnrollmentTestMixin, ModuleStoreTestCase, APITestCase, Ente
         the enrollment is being created or updated.
         """
         course_key = self.course.id
-        for mode in [CourseMode.DEFAULT_MODE_SLUG, CourseMode.VERIFIED]:
+        for mode in [CourseMode.get_default_mode_slug(), CourseMode.VERIFIED]:
             CourseModeFactory.create(
                 course_id=course_key,
                 mode_slug=mode,
@@ -1315,7 +1315,7 @@ class EnrollmentTest(EnrollmentTestMixin, ModuleStoreTestCase, APITestCase, Ente
             'name': 'order_number',
             'value': order_number,
         }]
-        mode = CourseMode.DEFAULT_MODE_SLUG
+        mode = CourseMode.get_default_mode_slug()
         self.assert_enrollment_status(
             as_server=True,
             mode=mode,
@@ -1552,7 +1552,7 @@ class UnenrollmentTest(EnrollmentTestMixin, ModuleStoreTestCase):
         for course in self.courses:
             CourseModeFactory.create(
                 course_id=str(course.id),
-                mode_slug=CourseMode.DEFAULT_MODE_SLUG,
+                mode_slug=CourseMode.get_default_mode_slug(),
                 mode_display_name=CourseMode.DEFAULT_MODE,
             )
 

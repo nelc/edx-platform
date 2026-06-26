@@ -136,7 +136,7 @@ class TestUserEnrollmentApi(UrlResetMixin, MobileAPITestCase, MobileAuthUserTest
         assert f'course_info/{self.course.id}/updates' in found_course['course_updates']
         assert f'course_info/{self.course.id}/handouts' in found_course['course_handouts']
         assert found_course['id'] == str(self.course.id)
-        assert courses[0]['mode'] == CourseMode.DEFAULT_MODE_SLUG
+        assert courses[0]['mode'] == CourseMode.get_default_mode_slug()
         assert courses[0]['course']['subscription_id'] == self.course.clean_id(padding_char='_')
 
         expected_course_image_url = course_image_url(self.course)

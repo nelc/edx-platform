@@ -142,7 +142,7 @@ class BasketsViewTests(UserMixin, ModuleStoreTestCase):
         )
         self.assertResponseMessage(response, msg)
 
-    def _test_course_without_sku(self, enrollment_mode=CourseMode.DEFAULT_MODE_SLUG):
+    def _test_course_without_sku(self, enrollment_mode=CourseMode.get_default_mode_slug()):
         """
         Validates the view when course has no CourseModes with SKUs.
         """

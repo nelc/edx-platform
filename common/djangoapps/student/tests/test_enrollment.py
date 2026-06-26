@@ -90,12 +90,12 @@ class EnrollmentTest(UrlResetMixin, ModuleStoreTestCase, OpenEdxEventsTestMixin)
         # Default (no course modes in the database)
         # Expect that we're redirected to the dashboard
         # and automatically enrolled
-        ([], '', CourseMode.DEFAULT_MODE_SLUG),
+        ([], '', CourseMode.get_default_mode_slug()),
 
         # Audit / Verified
         # We should always go to the "choose your course" page.
         # We should also be enrolled as the default mode.
-        (['verified', 'audit'], 'course_modes_choose', CourseMode.DEFAULT_MODE_SLUG),
+        (['verified', 'audit'], 'course_modes_choose', CourseMode.get_default_mode_slug()),
 
         # Audit / Verified / Honor
         # We should always go to the "choose your course" page.

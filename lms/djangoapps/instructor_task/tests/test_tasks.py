@@ -163,7 +163,7 @@ class TestInstructorTasks(InstructorTaskModuleTestCase):
             )
         return enrolled_students
 
-    def _create_and_enroll_students(self, num_students, mode=CourseMode.DEFAULT_MODE_SLUG):
+    def _create_and_enroll_students(self, num_students, mode=CourseMode.get_default_mode_slug()):
         """Create & enroll students for testing"""
         return [
             self.create_student(username='robot%d' % i, email='robot+test+%d@edx.org' % i, mode=mode)

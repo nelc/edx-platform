@@ -62,7 +62,7 @@ class EnrollmentTest(CacheIsolationTestCase):
         assert result == get_result
 
     @ddt.data(
-        ([CourseMode.DEFAULT_MODE_SLUG, 'verified', 'credit'], CourseMode.DEFAULT_MODE_SLUG),
+        ([CourseMode.get_default_mode_slug(), 'verified', 'credit'], CourseMode.get_default_mode_slug()),
         (['audit', 'verified', 'credit'], 'audit'),
         (['honor', 'verified', 'credit'], 'honor'),
     )

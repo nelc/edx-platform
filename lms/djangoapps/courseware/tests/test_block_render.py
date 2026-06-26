@@ -1144,9 +1144,9 @@ class TestProctoringRendering(ModuleStoreTestCase):
             )
 
     @ddt.data(
-        (CourseMode.DEFAULT_MODE_SLUG, False, None, None),
+        (CourseMode.get_default_mode_slug(), False, None, None),
         (
-            CourseMode.DEFAULT_MODE_SLUG,
+            CourseMode.get_default_mode_slug(),
             True,
             'eligible',
             {
@@ -1157,7 +1157,7 @@ class TestProctoringRendering(ModuleStoreTestCase):
             }
         ),
         (
-            CourseMode.DEFAULT_MODE_SLUG,
+            CourseMode.get_default_mode_slug(),
             True,
             'submitted',
             {
@@ -1168,7 +1168,7 @@ class TestProctoringRendering(ModuleStoreTestCase):
             }
         ),
         (
-            CourseMode.DEFAULT_MODE_SLUG,
+            CourseMode.get_default_mode_slug(),
             True,
             'error',
             {

@@ -1795,7 +1795,7 @@ class TestInstructorAPIEnrollment(SharedModuleStoreTestCase, LoginEnrollmentTest
         course_enrollment = CourseEnrollment.objects.get(
             user=self.enrolled_student, course_id=self.course.id
         )
-        assert course_enrollment.mode == CourseMode.DEFAULT_MODE_SLUG
+        assert course_enrollment.mode == CourseMode.get_default_mode_slug()
 
     def test_reason_is_persisted(self):
         """

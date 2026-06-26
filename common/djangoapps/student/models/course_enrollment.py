@@ -407,7 +407,7 @@ class CourseEnrollment(models.Model):
             user=user,
             course_id=course_key,
             defaults={
-                'mode': CourseMode.DEFAULT_MODE_SLUG,
+                'mode': CourseMode.get_default_mode_slug(),
                 'is_active': False
             }
         )

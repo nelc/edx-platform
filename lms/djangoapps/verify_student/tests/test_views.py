@@ -830,7 +830,7 @@ class TestPayAndVerifyView(UrlResetMixin, ModuleStoreTestCase, XssTestMixin, Tes
 
         return course
 
-    def _enroll(self, course_key, mode=CourseMode.DEFAULT_MODE_SLUG):
+    def _enroll(self, course_key, mode=CourseMode.get_default_mode_slug()):
         """Enroll the user in a course. """
         CourseEnrollmentFactory.create(
             user=self.user,
@@ -1009,8 +1009,8 @@ class TestPayAndVerifyView(UrlResetMixin, ModuleStoreTestCase, XssTestMixin, Tes
         """Check the course information on the page. """
         mode_display_name = "Introduction à l'astrophysique"
         course = CourseFactory.create(display_name=mode_display_name)
-        for course_mode in [CourseMode.DEFAULT_MODE_SLUG, "verified"]:
-            min_price = (self.MIN_PRICE if course_mode != CourseMode.DEFAULT_MODE_SLUG else 0)
+        for course_mode in [CourseMode.get_default_mode_slug(), "verified"]:
+            min_price = (self.MIN_PRICE if course_mode != CourseMode.get_default_mode_slug() else 0)
             CourseModeFactory.create(
                 course_id=course.id,
                 mode_slug=course_mode,

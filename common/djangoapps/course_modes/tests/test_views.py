@@ -332,7 +332,7 @@ class CourseModeViewTest(CatalogIntegrationMixin, UrlResetMixin, ModuleStoreTest
 
     def test_successful_default_enrollment(self):
         # Create the course modes
-        for mode in (CourseMode.DEFAULT_MODE_SLUG, 'verified'):
+        for mode in (CourseMode.get_default_mode_slug(), 'verified'):
             CourseModeFactory.create(mode_slug=mode, course_id=self.course.id)
 
         # Enroll the user in the default mode (honor) to emulate
@@ -345,11 +345,11 @@ class CourseModeViewTest(CatalogIntegrationMixin, UrlResetMixin, ModuleStoreTest
 
         # Explicitly select the honor mode (POST request)
         choose_track_url = reverse('course_modes_choose', args=[str(self.course.id)])
-        self.client.post(choose_track_url, self.POST_PARAMS_FOR_COURSE_MODE[CourseMode.DEFAULT_MODE_SLUG])
+        self.client.post(choose_track_url, self.POST_PARAMS_FOR_COURSE_MODE[CourseMode.get_default_mode_slug()])
 
         # Verify that the user's enrollment remains unchanged
         mode, is_active = CourseEnrollment.enrollment_mode_for_user(self.user, self.course.id)
-        assert mode == CourseMode.DEFAULT_MODE_SLUG
+        assert mode == CourseMode.get_default_mode_slug()
         assert is_active is True
 
     @skip_unless_lms

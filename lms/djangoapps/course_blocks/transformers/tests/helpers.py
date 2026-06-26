@@ -258,7 +258,7 @@ class BlockParentsMapTestCase(TransformerRegistryTestMixin, ModuleStoreTestCase)
         self.staff = UserFactory.create(is_staff=True, username='test_staff', password=self.password)
         CourseEnrollmentFactory.create(
             is_active=True,
-            mode=CourseMode.DEFAULT_MODE_SLUG,
+            mode=CourseMode.get_default_mode_slug(),
             user=self.student,
             course_id=self.course.id
         )

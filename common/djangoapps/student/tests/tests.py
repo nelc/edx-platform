@@ -645,7 +645,7 @@ class EnrollmentEventTestMixin(EventTestMixin):
             {
                 'course_id': str(course_key),
                 'user_id': user.pk,
-                'mode': CourseMode.DEFAULT_MODE_SLUG
+                'mode': CourseMode.get_default_mode_slug()
             }
         )
         self.mock_tracker.reset_mock()
@@ -662,7 +662,7 @@ class EnrollmentEventTestMixin(EventTestMixin):
             {
                 'course_id': str(course_key),
                 'user_id': user.pk,
-                'mode': CourseMode.DEFAULT_MODE_SLUG
+                'mode': CourseMode.get_default_mode_slug()
             }
         )
         self.mock_tracker.reset_mock()
@@ -927,7 +927,7 @@ class ChangeEnrollmentViewTest(ModuleStoreTestCase):
             self.user, self.course.id
         )
         assert is_active
-        assert enrollment_mode == CourseMode.DEFAULT_MODE_SLUG
+        assert enrollment_mode == CourseMode.get_default_mode_slug()
 
     def test_cannot_enroll_if_already_enrolled(self):
         """
@@ -977,7 +977,7 @@ class ChangeEnrollmentViewTest(ModuleStoreTestCase):
             self.user, self.course.id
         )
         assert is_active
-        assert enrollment_mode == CourseMode.DEFAULT_MODE_SLUG
+        assert enrollment_mode == CourseMode.get_default_mode_slug()
 
 
 class AnonymousLookupTable(ModuleStoreTestCase):

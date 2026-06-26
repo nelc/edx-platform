@@ -19,7 +19,7 @@ class CourseModeFactory(DjangoModelFactory):  # lint-amnesty, pylint: disable=mi
     class Meta:
         model = CourseMode
 
-    mode_slug = CourseMode.DEFAULT_MODE_SLUG
+    mode_slug = CourseMode.get_default_mode_slug()
     currency = 'usd'
     expiration_datetime = None
     suggested_prices = ''

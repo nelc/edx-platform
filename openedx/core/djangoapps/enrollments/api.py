@@ -211,7 +211,7 @@ def add_enrollment(
 ):
     """Enrolls a user in a course.
 
-    Enrolls a user in a course. If the mode is not specified, this will default to `CourseMode.DEFAULT_MODE_SLUG`.
+    Enrolls a user in a course. If the mode is not specified, this will default to `CourseMode.get_default_mode_slug()`.
 
     Arguments:
         username: The user to enroll.
@@ -472,14 +472,14 @@ def _default_course_mode(course_id):
     course_modes = CourseMode.modes_for_course(CourseKey.from_string(course_id))
     available_modes = [m.slug for m in course_modes]
 
-    if CourseMode.DEFAULT_MODE_SLUG in available_modes:
-        return CourseMode.DEFAULT_MODE_SLUG
+    if CourseMode.get_default_mode_slug() in available_modes:
+        return CourseMode.get_default_mode_slug()
     elif 'audit' in available_modes:
         return 'audit'
     elif 'honor' in available_modes:
         return 'honor'
 
-    return CourseMode.DEFAULT_MODE_SLUG
+    return CourseMode.get_default_mode_slug()
 
 
 def validate_course_mode(course_id, mode, is_active=None, include_expired=False):

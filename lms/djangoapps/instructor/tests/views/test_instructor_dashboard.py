@@ -73,7 +73,7 @@ class TestInstructorDashboard(ModuleStoreTestCase, LoginEnrollmentTestCase, XssT
 
         self.course_mode = CourseMode(
             course_id=self.course.id,
-            mode_slug=CourseMode.DEFAULT_MODE_SLUG,
+            mode_slug=CourseMode.get_default_mode_slug(),
             mode_display_name=CourseMode.DEFAULT_MODE.name,
             min_price=40
         )
@@ -620,7 +620,7 @@ class TestInstructorDashboardPerformance(ModuleStoreTestCase, LoginEnrollmentTes
 
         self.course_mode = CourseMode(
             course_id=self.course.id,
-            mode_slug=CourseMode.DEFAULT_MODE_SLUG,
+            mode_slug=CourseMode.get_default_mode_slug(),
             mode_display_name=CourseMode.DEFAULT_MODE.name,
             min_price=40
         )

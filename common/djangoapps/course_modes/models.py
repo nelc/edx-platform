@@ -187,7 +187,6 @@ class CourseMode(models.Model):
         settings.COURSE_MODE_DEFAULTS['ios_sku'],
         settings.COURSE_MODE_DEFAULTS['bulk_sku'],
     )
-    DEFAULT_MODE_SLUG = settings.COURSE_MODE_DEFAULTS['slug']
 
     ALL_MODES = [
         AUDIT,
@@ -299,7 +298,7 @@ class CourseMode(models.Model):
         Returns the default mode slug to be used in the CourseEnrollment model mode field
         as the default value.
         """
-        return cls.DEFAULT_MODE_SLUG
+        return settings.COURSE_MODE_DEFAULTS['slug']
 
     @classmethod
     def all_modes_for_courses(cls, course_id_list):

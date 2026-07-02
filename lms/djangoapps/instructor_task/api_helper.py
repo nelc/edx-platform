@@ -114,7 +114,7 @@ def generate_already_running_error_message(task_type):
         'proctored_exam_results_report': _('proctored exam results'),
         'export_ora2_data': _('ORA data'),
         'grade_course': _('grade'),
-
+        'student_enrollment_batch': _('student enrollment batch'),
     }
 
     if report_types.get(task_type):

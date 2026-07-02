@@ -50,19 +50,12 @@ from common.djangoapps.course_modes.models import CourseMode
 from common.djangoapps.student import auth
 from common.djangoapps.student.api import is_user_enrolled_in_course
 from common.djangoapps.student.models import (
-    ALLOWEDTOENROLL_TO_ENROLLED,
-    ALLOWEDTOENROLL_TO_UNENROLLED,
+    UNENROLLED_TO_ENROLLED,
     CourseEnrollment,
     CourseEnrollmentAllowed,
-    DEFAULT_TRANSITION_STATE,
-    ENROLLED_TO_ENROLLED,
-    ENROLLED_TO_UNENROLLED,
     EntranceExamConfiguration,
     ManualEnrollmentAudit,
     Registration,
-    UNENROLLED_TO_ALLOWEDTOENROLL,
-    UNENROLLED_TO_ENROLLED,
-    UNENROLLED_TO_UNENROLLED,
     UserProfile,
     get_user_by_username_or_email,
     is_email_retired,
@@ -92,11 +85,10 @@ from lms.djangoapps.instructor.constants import INVOICE_KEY
 from lms.djangoapps.instructor.enrollment import (
     enroll_email,
     get_email_params,
-    get_user_email_language,
     send_beta_role_email,
     send_mail_to_student,
-    unenroll_email,
 )
+from lms.djangoapps.instructor.utils import process_student_enrollment_batch
 from lms.djangoapps.instructor.views.instructor_task_helpers import extract_email_features, extract_task_features
 from lms.djangoapps.instructor_analytics import basic as instructor_analytics_basic, csvs as instructor_analytics_csvs
 from lms.djangoapps.instructor_task import api as task_api
@@ -116,7 +108,8 @@ from lms.djangoapps.instructor.views.serializer import (
     StudentAttemptsSerializer,
     UserSerializer,
     UniqueStudentIdentifierSerializer,
-    ProblemResetSerializer
+    ProblemResetSerializer,
+    StudentsUpdateEnrollmentSerializer
 )
 from openedx.core.djangoapps.content.course_overviews.models import CourseOverview
 from openedx.core.djangoapps.course_groups.cohorts import add_user_to_cohort, is_course_cohorted
@@ -130,6 +123,7 @@ from openedx.core.djangoapps.django_comment_common.models import (
     Role,
 )
 from openedx.core.djangoapps.site_configuration import helpers as configuration_helpers
+from openedx.core.djangoapps.theming.helpers import get_current_site
 from openedx.core.djangoapps.user_api.preferences.api import get_user_preference
 from openedx.core.djangolib.markup import HTML, Text
 from openedx.core.lib.api.authentication import BearerAuthenticationAllowInactiveUser
@@ -759,161 +753,160 @@ def create_and_enroll_user(
     return errors
 
 
-@require_POST
-@ensure_csrf_cookie
-@cache_control(no_cache=True, no_store=True, must_revalidate=True)
-@require_course_permission(permissions.CAN_ENROLL)
-@require_post_params(action="enroll or unenroll", identifiers="stringified list of emails and/or usernames")
-def students_update_enrollment(request, course_id):  # lint-amnesty, pylint: disable=too-many-statements
+@method_decorator(cache_control(no_cache=True, no_store=True, must_revalidate=True), name='dispatch')
+@method_decorator(transaction.non_atomic_requests, name='dispatch')
+class StudentsUpdateEnrollmentView(DeveloperErrorViewMixin, APIView):
     """
-    Enroll or unenroll students by email.
-    Requires staff access.
+    API view to enroll or unenroll students in a course.
+    """
 
-    Query Parameters:
-    - action in ['enroll', 'unenroll']
-    - identifiers is string containing a list of emails and/or usernames separated by anything split_input_list can handle.  # lint-amnesty, pylint: disable=line-too-long
-    - auto_enroll is a boolean (defaults to false)
-        If auto_enroll is false, students will be allowed to enroll.
-        If auto_enroll is true, students will be enrolled as soon as they register.
-    - email_students is a boolean (defaults to false)
-        If email_students is true, students will be sent email notification
-        If email_students is false, students will not be sent email notification
+    permission_classes = (IsAuthenticated, permissions.InstructorPermission)
+    permission_name = permissions.CAN_ENROLL
 
-    Returns an analog to this JSON structure: {
-        "action": "enroll",
-        "auto_enroll": false,
-        "results": [
-            {
-                "email": "testemail@test.org",
-                "before": {
-                    "enrollment": false,
-                    "auto_enroll": false,
-                    "user": true,
-                    "allowed": false
-                },
-                "after": {
-                    "enrollment": true,
-                    "auto_enroll": false,
-                    "user": true,
-                    "allowed": false
+    @method_decorator(ensure_csrf_cookie)
+    @transaction.non_atomic_requests
+    def post(self, request, course_id):
+        """
+        Handle POST request to enroll or unenroll students.
+
+        Parameters:
+        - action (str): 'enroll' or 'unenroll'
+        - identifiers (str): comma/newline separated emails or usernames
+        - auto_enroll (bool): auto-enroll in verified track if applicable
+        - email_students (bool): whether to send enrollment emails
+        - async_processing (bool): whether to process asynchronously
+        - reason (str, optional): reason for enrollment change
+
+        Returns:
+        - JSON response with action, auto_enroll flag, and enrollment results.
+         """
+        response_payload = self._process_student_enrollment(
+            request=request,
+            course_id=course_id,
+            data=request.data,
+            secure=request.is_secure()
+        )
+        return JsonResponse(response_payload)
+
+    def _process_student_enrollment(self, request, course_id, data, secure):  # pylint: disable=too-many-statements
+        """
+        Core logic for enrolling or unenrolling students.
+
+        :param request: The HTTP request object
+        :param course_id: Course identifier
+        :param data: Request data containing action, identifiers, etc.
+        :param secure: Whether the request is secure (HTTPS)
+        """
+
+        # Validate request data with serializer
+        serializer = StudentsUpdateEnrollmentSerializer(data=data)
+        serializer.is_valid(raise_exception=True)
+
+        # Extract validated data
+        action = serializer.validated_data['action']
+        identifiers_raw = serializer.validated_data['identifiers']
+        auto_enroll = serializer.validated_data['auto_enroll']
+        email_students = serializer.validated_data['email_students']
+        async_processing = serializer.validated_data["async_processing"]
+        reason = serializer.validated_data.get('reason')
+
+        # Parse identifiers
+        identifiers = _split_input_list(identifiers_raw)
+
+        course_key = CourseKey.from_string(course_id)
+
+        site = get_current_site()
+        site_id = site.id if site else None
+
+        if async_processing:
+
+            try:
+                instructor_task = task_api.submit_student_enrollment_batch(
+                    request=request,
+                    course_key=course_key,
+                    action=action,
+                    identifiers=identifiers,
+                    auto_enroll=auto_enroll,
+                    email_students=email_students,
+                    reason=reason,
+                    secure=secure,
+                    site_id=site_id,
+                )
+
+                return {
+                    "action": action,
+                    "auto_enroll": auto_enroll,
+                    "async_processing": True,
+                    "task_id": instructor_task.task_id,
+                    "task_state": instructor_task.task_state,
+                    "message": f"Async {action} task submitted for {len(identifiers)} students",
+                    "total_students": len(identifiers),
                 }
-            }
-        ]
-    }
-    """
-    course_id = CourseKey.from_string(course_id)
-    action = request.POST.get('action')
-    identifiers_raw = request.POST.get('identifiers')
-    identifiers = _split_input_list(identifiers_raw)
-    auto_enroll = _get_boolean_param(request, 'auto_enroll')
-    email_students = _get_boolean_param(request, 'email_students')
-    reason = request.POST.get('reason')
 
-    enrollment_obj = None
-    state_transition = DEFAULT_TRANSITION_STATE
+            except AlreadyRunningError:
+                return {
+                    "action": action,
+                    "auto_enroll": auto_enroll,
+                    "async_processing": True,
+                    "error": "A similar enrollment task is already running. Please wait for it to complete.",
+                    "total_students": len(identifiers),
+                }
 
-    email_params = {}
-    if email_students:
-        course = get_course_by_id(course_id)
-        email_params = get_email_params(course, auto_enroll, secure=request.is_secure())
+        return self._process_enrollment_sync(
+            request.user, course_key, action, identifiers, auto_enroll, email_students, reason, secure
+        )
 
-    results = []
-    for identifier in identifiers:  # lint-amnesty, pylint: disable=too-many-nested-blocks
-        # First try to get a user object from the identifier
-        user = None
-        email = None
-        language = None
-        try:
-            user = get_student_from_identifier(identifier)
-        except User.DoesNotExist:
-            email = identifier
-        else:
-            email = user.email
-            language = get_user_email_language(user)
+    def _process_enrollment_sync(
+        self,
+        request_user: User,
+        course_key: CourseKey,
+        action: str,
+        identifiers: list[str],
+        auto_enroll: bool,
+        email_students: bool,
+        reason: str | None,
+        secure: bool,
+    ):
+        """
+        Process student enrollment/unenrollment operations synchronously.
 
-        try:
-            # Use django.core.validators.validate_email to check email address
-            # validity (obviously, cannot check if email actually /exists/,
-            # simply that it is plausibly valid)
-            validate_email(email)  # Raises ValidationError if invalid
-            if action == 'enroll':
-                before, after, enrollment_obj = enroll_email(
-                    course_id, email, auto_enroll, email_students, {**email_params}, language=language
-                )
-                before_enrollment = before.to_dict()['enrollment']
-                before_user_registered = before.to_dict()['user']
-                before_allowed = before.to_dict()['allowed']
-                after_enrollment = after.to_dict()['enrollment']
-                after_allowed = after.to_dict()['allowed']
+        This method handles batch enrollment operations by calling the
+        `process_student_enrollment_batch` utility function and returns a
+        simplified response containing the action, auto_enroll setting,
+        and enrollment results.
 
-                if before_user_registered:
-                    if after_enrollment:
-                        if before_enrollment:
-                            state_transition = ENROLLED_TO_ENROLLED
-                        else:
-                            if before_allowed:
-                                state_transition = ALLOWEDTOENROLL_TO_ENROLLED
-                            else:
-                                state_transition = UNENROLLED_TO_ENROLLED
-                else:
-                    if after_allowed:
-                        state_transition = UNENROLLED_TO_ALLOWEDTOENROLL
+        Args:
+            request_user (User): User who initiated the enrollment operation
+            course_key (CourseKey): CourseKey object for the target course
+            action (str): The enrollment action to perform ('enroll' or 'unenroll')
+            identifiers (list[str]): List of student identifiers (emails or usernames)
+            auto_enroll (bool): Whether to auto-enroll students in verified track if applicable
+            email_students (bool): Whether to send enrollment notification emails
+            reason (str | None): Optional reason for the enrollment change
+            secure (bool): Whether the request was made over HTTPS
 
-            elif action == 'unenroll':
-                before, after = unenroll_email(
-                    course_id, email, email_students, {**email_params}, language=language
-                )
-                before_enrollment = before.to_dict()['enrollment']
-                before_allowed = before.to_dict()['allowed']
-                enrollment_obj = CourseEnrollment.get_enrollment(user, course_id) if user else None
+        Returns:
+            dict: Enrollment operation results containing:
+                - action: The action that was performed
+                - auto_enroll: The auto-enrollment setting used
+                - results: List of individual enrollment results for each student
+        """
+        batch_result = process_student_enrollment_batch(
+            request_user=request_user,
+            course_key=course_key,
+            action=action,
+            identifiers=identifiers,
+            auto_enroll=auto_enroll,
+            email_students=email_students,
+            reason=reason,
+            secure=secure,
+        )
 
-                if before_enrollment:
-                    state_transition = ENROLLED_TO_UNENROLLED
-                else:
-                    if before_allowed:
-                        state_transition = ALLOWEDTOENROLL_TO_UNENROLLED
-                    else:
-                        state_transition = UNENROLLED_TO_UNENROLLED
-
-            else:
-                return HttpResponseBadRequest(strip_tags(
-                    f"Unrecognized action '{action}'"
-                ))
-
-        except ValidationError:
-            # Flag this email as an error if invalid, but continue checking
-            # the remaining in the list
-            results.append({
-                'identifier': identifier,
-                'invalidIdentifier': True,
-            })
-
-        except Exception as exc:  # pylint: disable=broad-except
-            # catch and log any exceptions
-            # so that one error doesn't cause a 500.
-            log.exception("Error while #{}ing student")
-            log.exception(exc)
-            results.append({
-                'identifier': identifier,
-                'error': True,
-            })
-
-        else:
-            ManualEnrollmentAudit.create_manual_enrollment_audit(
-                request.user, email, state_transition, reason, enrollment_obj
-            )
-            results.append({
-                'identifier': identifier,
-                'before': before.to_dict(),
-                'after': after.to_dict(),
-            })
-
-    response_payload = {
-        'action': action,
-        'results': results,
-        'auto_enroll': auto_enroll,
-    }
-    return JsonResponse(response_payload)
+        return {
+            "action": batch_result["action"],
+            "auto_enroll": batch_result["auto_enroll"],
+            "results": batch_result["results"],
+        }
 
 
 @method_decorator(cache_control(no_cache=True, no_store=True, must_revalidate=True), name='dispatch')

@@ -225,7 +225,7 @@
 .xmodule_display.xmodule_ProblemBlock div.problem .choicegroup input[type="checkbox"],
 .xmodule_display.xmodule_ProblemBlock div.problem .choicetextgroup input[type="checkbox"] {
     margin: calc((var(--baseline, 20px) / 4));
-    margin-right: calc((var(--baseline, 20px) / 2));
+    margin-inline-end: calc((var(--baseline, 20px) / 2));
 }
 
 .xmodule_display.xmodule_ProblemBlock div.problem .choicegroup input:focus+label,
@@ -394,7 +394,7 @@
 
 .xmodule_display.xmodule_ProblemBlock div.problem .choicegroup label {
     padding: calc((var(--baseline, 20px) / 2));
-    padding-left: calc((var(--baseline, 20px) * 2.3));
+    padding-inline-start: calc((var(--baseline, 20px) * 2.3));
     position: relative;
     font-size: var(--base-font-size, 18px);
     line-height: normal;
@@ -403,7 +403,7 @@
 
 .xmodule_display.xmodule_ProblemBlock div.problem .choicegroup input[type="radio"],
 .xmodule_display.xmodule_ProblemBlock div.problem .choicegroup input[type="checkbox"] {
-    left: 0.5625em;
+    inset-inline-start: 0.5625em;
     position: absolute;
     top: 0.35em;
     width: calc(var(--baseline, 20px) * 1.1);

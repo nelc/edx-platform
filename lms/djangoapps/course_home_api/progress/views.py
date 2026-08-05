@@ -17,6 +17,7 @@ from common.djangoapps.student.models import CourseEnrollment
 from lms.djangoapps.ccx.custom_exception import CCXLocatorValidationException
 from lms.djangoapps.course_blocks.api import get_course_blocks
 from lms.djangoapps.course_blocks.transformers import start_date
+from lms.djangoapps.course_home_api import permissions
 from lms.djangoapps.course_home_api.progress.api import aggregate_assignment_type_grade_summary
 from lms.djangoapps.course_home_api.progress.serializers import ProgressTabSerializer
 from lms.djangoapps.course_home_api.toggles import course_home_mfe_progress_tab_is_active
@@ -198,9 +199,9 @@ class ProgressTabView(RetrieveAPIView):
         monitoring_utils.set_custom_attribute('course_id', course_key_string)
         monitoring_utils.set_custom_attribute('user_id', request.user.id)
         monitoring_utils.set_custom_attribute('is_staff', request.user.is_staff)
-        requester_has_staff_access = bool(has_access(request.user, 'staff', course_key))
+        can_masquerade = request.user.has_perm(permissions.CAN_MASQUERADE_LEARNER_PROGRESS, course_key)
 
-        student = self._get_student_user(request, course_key, student_id, requester_has_staff_access)
+        student = self._get_student_user(request, course_key, student_id, can_masquerade)
         learner_has_staff_access = bool(has_access(student, 'staff', course_key))
         username = get_enterprise_learner_generic_name(request) or student.username
 
@@ -210,7 +211,7 @@ class ProgressTabView(RetrieveAPIView):
         enrollment = CourseEnrollment.get_enrollment(student, course_key)
         enrollment_mode = getattr(enrollment, 'mode', None)
 
-        if not (enrollment and enrollment.is_active) and not requester_has_staff_access:
+        if not (enrollment and enrollment.is_active) and not can_masquerade:
             return Response('User not enrolled.', status=401)
 
         # The block structure is used for both the course_grade and has_scheduled content fields

@@ -601,18 +601,25 @@ def get_extended_profile(user_profile: UserProfile) -> list[dict[str, str]]:
 
     def get_extended_profile_data():
         extended_profile_model = get_extended_profile_model()
-
+        extended_profile_data = {}
+        extended_profile_data_static = {}
+        extended_profile_data_dynamic = {}
         if extended_profile_model:
             try:
                 profile_obj = extended_profile_model.objects.get(user=user_profile.user)
-                return model_to_dict(profile_obj)
+                extended_profile_data_static = model_to_dict(profile_obj)
             except extended_profile_model.DoesNotExist:
-                return {}
+                pass
 
         try:
-            return json.loads(user_profile.meta or "{}")
+            extended_profile_data_dynamic = json.loads(user_profile.meta or "{}")
         except (ValueError, TypeError, AttributeError):
-            return {}
+            pass
+
+        extended_profile_data.update(extended_profile_data_dynamic)
+        extended_profile_data.update(extended_profile_data_static)
+
+        return extended_profile_data
 
     data = get_extended_profile_data()
     field_names = configuration_helpers.get_value("extended_profile_fields", [])

@@ -123,11 +123,11 @@ def get_extended_profile_form(
               or form validation fails.
             - field_errors (dict): Dictionary of validation errors, if any
     """
-    _, static_fields = get_extended_profile_field_names()
+    configured_fields, static_fields = get_extended_profile_field_names()
     static_data = {
         field_name: field_value
         for field_name, field_value in extended_profile_fields_data.items()
-        if field_name in static_fields
+        if field_name in configured_fields and field_name in static_fields
     }
     if not static_data:
         return None, {}

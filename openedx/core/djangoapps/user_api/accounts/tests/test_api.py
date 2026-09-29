@@ -570,6 +570,7 @@ class TestAccountApi(UserSettingsEventTestMixin, EmailTemplateTagMixin, CreateAc
         result = get_name_validation_error("A" * 256)
         assert result == "Full name can't be longer than 255 symbols"
 
+    @with_site_configuration(configuration={"extended_profile_fields": ["department", "title"]})
     def test_update_extended_profile_with_meta_only(self):
         """
         Test updating extended profile using only the meta field (legacy behavior)
@@ -590,12 +591,14 @@ class TestAccountApi(UserSettingsEventTestMixin, EmailTemplateTagMixin, CreateAc
         self.assertEqual(meta["title"], "Software Engineer")  # noqa: PT009
         self.assertEqual(user_profile.bio, "Updated bio")  # noqa: PT009
 
+    @patch("openedx.core.djangoapps.user_api.accounts.api.get_extended_profile_field_names")
     @patch("openedx.core.djangoapps.user_api.accounts.api.validate_and_get_extended_profile_form")
-    def test_update_extended_profile_with_form(self, mock_validate_and_get_form):
+    def test_update_extended_profile_with_form(self, mock_validate_and_get_form, mock_field_names):
         """
         Test updating extended profile with a validated form
         """
         extended_profile_data = [{"field_name": "department", "field_value": "Engineering"}]
+        mock_field_names.return_value = ({"department"}, {"department"})
         mock_form = Mock(save=Mock(return_value=Mock(user=self.user)))
         mock_validate_and_get_form.return_value = (mock_form, {})
 
@@ -605,14 +608,16 @@ class TestAccountApi(UserSettingsEventTestMixin, EmailTemplateTagMixin, CreateAc
         mock_form.save.assert_called_once_with(commit=False)
         mock_form.save.return_value.save.assert_called_once()
         meta = UserProfile.objects.get(user=self.user).get_meta()
-        self.assertEqual(meta["department"], "Engineering")  # noqa: PT009
+        self.assertNotIn("department", meta)  # noqa: PT009
 
+    @patch("openedx.core.djangoapps.user_api.accounts.api.get_extended_profile_field_names")
     @patch("openedx.core.djangoapps.user_api.accounts.api.validate_and_get_extended_profile_form")
-    def test_update_extended_profile_with_form_new_instance(self, mock_validate_and_get_form):
+    def test_update_extended_profile_with_form_new_instance(self, mock_validate_and_get_form, mock_field_names):
         """
         Test updating extended profile with a form for a new instance
         """
         extended_profile_data = [{"field_name": "department", "field_value": "Engineering"}]
+        mock_field_names.return_value = ({"department"}, {"department"})
         mock_instance = Mock(user=None)
         mock_form = Mock(save=Mock(return_value=mock_instance))
         mock_validate_and_get_form.return_value = (mock_form, {})
@@ -624,6 +629,7 @@ class TestAccountApi(UserSettingsEventTestMixin, EmailTemplateTagMixin, CreateAc
         self.assertEqual(mock_instance.user, self.user)  # noqa: PT009
         mock_instance.save.assert_called_once()
 
+    @patch("openedx.core.djangoapps.user_api.accounts.api.get_extended_profile_field_names")
     @patch("openedx.core.djangoapps.user_api.accounts.api.validate_and_get_extended_profile_form")
     @ddt.data(
         (ValidationError("Invalid field value"), "Extended profile validation failed"),
@@ -631,12 +637,15 @@ class TestAccountApi(UserSettingsEventTestMixin, EmailTemplateTagMixin, CreateAc
         (DatabaseError("Connection lost"), "Database error saving extended profile"),
     )
     @ddt.unpack
-    def test_update_extended_profile_form_save_error(self, exception, expected_dev_msg, mock_validate_and_get_form):
+    def test_update_extended_profile_form_save_error(
+        self, exception, expected_dev_msg, mock_validate_and_get_form, mock_field_names
+    ):
         """
         Test that errors during form save cause an AccountUpdateError with appropriate messages,
         and do not leave partial updates.
         """
         extended_profile_data = [{"field_name": "department", "field_value": "Engineering"}]
+        mock_field_names.return_value = ({"department"}, {"department"})
         mock_form = Mock()
         mock_form.save.side_effect = exception
         mock_validate_and_get_form.return_value = (mock_form, {})

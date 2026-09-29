@@ -21,7 +21,6 @@ from common.djangoapps.student.models import (
     UserPasswordToggleHistory,
     UserProfile,
 )
-from openedx.core.djangoapps.site_configuration import helpers as configuration_helpers
 from openedx.core.djangoapps.user_api import errors
 from openedx.core.djangoapps.user_api.accounts.utils import is_secondary_email_feature_enabled
 from openedx.core.djangoapps.user_api.models import RetirementState, UserPreference, UserRetirementStatus
@@ -42,6 +41,7 @@ from . import (
     PRIVATE_VISIBILITY,
     VISIBILITY_PREFIX,
 )
+from .forms import get_extended_profile_field_names
 from .image_helpers import get_profile_image_urls_for_user
 from .utils import format_social_link, validate_social_link
 
@@ -576,19 +576,16 @@ def get_extended_profile(user_profile: UserProfile) -> list[dict[str, str]]:
     Retrieve extended user profile fields for API serialization.
 
     This function extracts custom profile fields that extend beyond the standard
-    UserProfile model. It prefers data from a custom extended profile model
-    (when configured), and only uses the `user_profile.meta` JSON field when
-    no such model is configured. The returned data is filtered to include only
-    fields specified in the `extended_profile_fields` site configuration.
+    UserProfile model. Fields configured on the extension model are read from
+    that model; other configured fields are read from `user_profile.meta`. Only
+    fields specified in the `extended_profile_fields` site configuration are
+    returned.
 
     The function supports two data sources:
-    1. Custom model: If the `PROFILE_EXTENSION_FORM` setting points to a form with a
-        `Meta.model`, data is retrieved from that model using `model_to_dict()`. If a
-        model is configured but the user does not yet have a corresponding record,
-        this function returns an empty mapping for extended profile fields (it does
-        not fall back to `user_profile.meta` in that case).
-    2. Fallback: JSON data stored in `UserProfile.meta` field, used only when no
-        custom extended profile model is configured.
+    1. Static fields: Configured names that are concrete fields on the model from
+        `PROFILE_EXTENSION_FORM` are read from that model.
+    2. Dynamic fields: Other configured names are read from the JSON data stored
+        in `UserProfile.meta`.
 
     Args:
         user_profile (UserProfile): The user profile instance to get extended fields from.
@@ -601,28 +598,30 @@ def get_extended_profile(user_profile: UserProfile) -> list[dict[str, str]]:
 
     def get_extended_profile_data():
         extended_profile_model = get_extended_profile_model()
+        configured_fields, static_fields = get_extended_profile_field_names()
         extended_profile_data = {}
-        extended_profile_data_static = {}
-        extended_profile_data_dynamic = {}
         if extended_profile_model:
             try:
                 profile_obj = extended_profile_model.objects.get(user=user_profile.user)
-                extended_profile_data_static = model_to_dict(profile_obj)
+                static_data = model_to_dict(profile_obj)
             except extended_profile_model.DoesNotExist:
-                pass
+                static_data = {}
+        else:
+            static_data = {}
 
         try:
-            extended_profile_data_dynamic = json.loads(user_profile.meta or "{}")
+            dynamic_data = json.loads(user_profile.meta or "{}")
         except (ValueError, TypeError, AttributeError):
-            pass
+            dynamic_data = {}
 
-        extended_profile_data.update(extended_profile_data_dynamic)
-        extended_profile_data.update(extended_profile_data_static)
+        for field_name in configured_fields:
+            source = static_data if field_name in static_fields else dynamic_data
+            extended_profile_data[field_name] = source.get(field_name, "")
 
         return extended_profile_data
 
     data = get_extended_profile_data()
-    field_names = configuration_helpers.get_value("extended_profile_fields", [])
+    field_names, _ = get_extended_profile_field_names()
     return [{"field_name": name, "field_value": data.get(name, "")} for name in field_names]
 
 

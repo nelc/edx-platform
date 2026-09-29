@@ -9,6 +9,7 @@ from django.core.exceptions import ObjectDoesNotExist, ValidationError
 from django.utils.translation import gettext as _
 
 from common.djangoapps.student.models import User
+from openedx.core.djangoapps.site_configuration import helpers as configuration_helpers
 from openedx.core.djangoapps.user_api.accounts.utils import handle_retirement_cancellation
 from openedx.core.djangoapps.user_authn.views.registration_form import (
     get_extended_profile_model,
@@ -16,6 +17,21 @@ from openedx.core.djangoapps.user_authn.views.registration_form import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+def get_extended_profile_field_names() -> tuple[set[str], set[str]]:
+    """Return configured extension fields and the subset backed by the extension model.
+    Returns:
+        tuple[set[str], set[str]]: A tuple containing the set of configured extension fields
+        and the set of fields backed by the extension model.
+    """
+    configured_fields = set(configuration_helpers.get_value("extended_profile_fields", []) or [])
+    extended_profile_model = get_extended_profile_model()
+    if not extended_profile_model:
+        return configured_fields, set()
+
+    model_field_names = {field.name for field in extended_profile_model._meta.concrete_fields}
+    return configured_fields, configured_fields.intersection(model_field_names)
 
 
 class RetirementQueueDeletionForm(forms.Form):
@@ -107,6 +123,15 @@ def get_extended_profile_form(
               or form validation fails.
             - field_errors (dict): Dictionary of validation errors, if any
     """
+    _, static_fields = get_extended_profile_field_names()
+    static_data = {
+        field_name: field_value
+        for field_name, field_value in extended_profile_fields_data.items()
+        if field_name in static_fields
+    }
+    if not static_data:
+        return None, {}
+
     field_errors, kwargs = {}, {}
     extended_profile_model = get_extended_profile_model()
 
@@ -118,7 +143,7 @@ def get_extended_profile_form(
         logger.info("No existing extended profile found for user %s, creating new instance", user.username)
 
     try:
-        extended_profile_form = get_registration_extension_form(data=extended_profile_fields_data, **kwargs)
+        extended_profile_form = get_registration_extension_form(data=static_data, **kwargs)
     except Exception as e:  # pylint: disable=broad-exception-caught
         logger.error("Unexpected error creating custom form for user %s: %s", user.username, str(e))
         field_errors["extended_profile"] = {
@@ -129,6 +154,9 @@ def get_extended_profile_form(
 
     if extended_profile_form is None:
         return None, field_errors
+
+    for field_name in set(extended_profile_form.fields) - static_fields:
+        del extended_profile_form.fields[field_name]
 
     if not extended_profile_form.is_valid():
         logger.info("Extended profile form validation failed with errors: %s", extended_profile_form.errors)
@@ -168,10 +196,16 @@ def validate_and_get_extended_profile_form(
     if field_errors:
         return None, field_errors
 
-    if not extended_profile_fields_data:
+    configured_fields, static_fields = get_extended_profile_field_names()
+    static_data = {
+        field_name: field_value
+        for field_name, field_value in extended_profile_fields_data.items()
+        if field_name in configured_fields and field_name in static_fields
+    }
+    if not static_data:
         return None, {}
 
-    extended_profile_form, form_errors = get_extended_profile_form(extended_profile_fields_data, user)
+    extended_profile_form, form_errors = get_extended_profile_form(static_data, user)
 
     if form_errors:
         field_errors.update(form_errors)

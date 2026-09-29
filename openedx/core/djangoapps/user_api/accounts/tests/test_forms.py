@@ -236,7 +236,13 @@ class TestGetExtendedProfileForm(TestCase):
         mock_get_form.side_effect = Exception("Unexpected error")
         extended_profile_fields_data = {"department": "Engineering"}
 
-        with patch("openedx.core.djangoapps.user_api.accounts.forms.get_extended_profile_model"):
+        with (
+            patch("openedx.core.djangoapps.user_api.accounts.forms.get_extended_profile_model"),
+            patch(
+                "openedx.core.djangoapps.user_api.accounts.forms.get_extended_profile_field_names",
+                return_value=({"department"}, {"department"}),
+            ),
+        ):
             form, errors = get_extended_profile_form(extended_profile_fields_data, self.user)
 
         self.assertIsNone(form)  # noqa: PT009

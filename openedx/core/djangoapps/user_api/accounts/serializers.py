@@ -600,10 +600,12 @@ def get_extended_profile(user_profile: UserProfile) -> list[dict[str, str]]:
         extended_profile_model = get_extended_profile_model()
         configured_fields, static_fields = get_extended_profile_field_names()
         extended_profile_data = {}
+        static_record_exists = False
         if extended_profile_model:
             try:
                 profile_obj = extended_profile_model.objects.get(user=user_profile.user)
                 static_data = model_to_dict(profile_obj)
+                static_record_exists = True
             except extended_profile_model.DoesNotExist:
                 static_data = {}
         else:
@@ -615,7 +617,7 @@ def get_extended_profile(user_profile: UserProfile) -> list[dict[str, str]]:
             dynamic_data = {}
 
         for field_name in configured_fields:
-            source = static_data if field_name in static_fields else dynamic_data
+            source = static_data if field_name in static_fields and static_record_exists else dynamic_data
             extended_profile_data[field_name] = source.get(field_name, "")
 
         return extended_profile_data

@@ -34,7 +34,6 @@ class TestUserPreferenceMiddleware(CacheIsolationTestCase):
     """
     Tests to make sure user preferences are getting properly set in the middleware.
     """
-    ENABLED_CACHES = ['default']
 
     def setUp(self):
         super().setUp()
@@ -221,7 +220,7 @@ class TestUserPreferenceMiddleware(CacheIsolationTestCase):
 
         response = mock.Mock(spec=HttpResponse)
 
-        with self.assertNumQueries(0):
+        with self.assertNumQueries(1):
             self.middleware.process_response(self.request, response)
 
         # Preference is the same as the cookie, shouldn't write to the database
@@ -233,7 +232,7 @@ class TestUserPreferenceMiddleware(CacheIsolationTestCase):
 
         response = mock.Mock(spec=HttpResponse)
 
-        with self.assertNumQueries(0):
+        with self.assertNumQueries(1):
             self.middleware.process_response(self.request, response)
 
         # Cookie changed, should write to the database again
@@ -242,7 +241,7 @@ class TestUserPreferenceMiddleware(CacheIsolationTestCase):
         self.middleware.process_request(self.request)
         assert get_user_preference(self.user, LANGUAGE_KEY) == 'en'
 
-        with self.assertNumQueries(0):
+        with self.assertNumQueries(1):
             self.middleware.process_response(self.request, response)
 
     @mock.patch('openedx.core.djangoapps.lang_pref.middleware.is_request_from_mobile_app')

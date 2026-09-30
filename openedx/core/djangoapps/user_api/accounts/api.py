@@ -44,7 +44,7 @@ from openedx.core.djangoapps.user_authn.views.registration_form import validate_
 from openedx.core.lib.api.view_utils import add_serializer_errors
 from openedx.features.name_affirmation_api.utils import is_name_affirmation_installed
 
-from .forms import validate_and_get_extended_profile_form
+from .forms import get_extended_profile_field_names, validate_and_get_extended_profile_form
 from .serializers import AccountLegacyProfileSerializer, AccountUserSerializer, UserReadOnlySerializer, _visible_fields
 
 name_affirmation_installed = is_name_affirmation_installed()
@@ -370,9 +370,9 @@ def _update_extended_profile_if_needed(
     """
     Update the extended profile information if present in the data.
 
-    This function handles two types of extended profile updates:
-    1. Updates the user profile meta fields with extended_profile data
-    2. Saves the extended profile form data to the extended profile model if a validated form is provided
+    Configured extension fields backed by the custom model are saved through the
+    validated form. Other configured extension fields are saved to UserProfile.meta.
+    Fields outside the site-configured allowlist are ignored.
 
     Args:
         data (dict): Dictionary containing the update data, may include 'extended_profile' key
@@ -383,7 +383,8 @@ def _update_extended_profile_if_needed(
     Note:
         If `extended_profile` is present in data, the function will:
         - Extract `field_name` and `field_value` pairs from extended_profile list
-        - Update the `user_profile.meta` dictionary with new values and save the profile
+                - Update the `user_profile.meta` dictionary with configured dynamic values
+                    and save the profile
 
         If `extended_profile_form` is provided and valid, the function will:
         - Save the form data to the extended profile model
@@ -404,13 +405,20 @@ def _update_extended_profile_if_needed(
         with transaction.atomic():
             if has_extended_profile_data:
                 meta = user_profile.get_meta()
+                configured_fields, static_fields = get_extended_profile_field_names()
+                dynamic_values = {}
                 new_extended_profile = data["extended_profile"]
                 for field in new_extended_profile:
-                    field_name = field["field_name"]
-                    new_value = field["field_value"]
-                    meta[field_name] = new_value
-                user_profile.set_meta(meta)
-                user_profile.save()
+                    if not isinstance(field, dict):
+                        continue
+                    field_name = field.get("field_name")
+                    if field_name not in configured_fields or field_name in static_fields:
+                        continue
+                    dynamic_values[field_name] = field.get("field_value")
+                if dynamic_values:
+                    meta.update(dynamic_values)
+                    user_profile.set_meta(meta)
+                    user_profile.save()
 
             if has_extended_profile_form:
                 # Use commit=False to create the model instance in memory without saving to DB yet.

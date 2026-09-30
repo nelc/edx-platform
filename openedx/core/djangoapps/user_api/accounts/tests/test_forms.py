@@ -112,6 +112,12 @@ class TestGetExtendedProfileForm(TestCase):
     def setUp(self):
         super().setUp()
         self.user = UserFactory.create()
+        field_names_patch = patch(
+            "openedx.core.djangoapps.user_api.accounts.forms.get_extended_profile_field_names",
+            return_value=({"department", "title"}, {"department", "title"}),
+        )
+        field_names_patch.start()
+        self.addCleanup(field_names_patch.stop)
 
     @patch("openedx.core.djangoapps.user_api.accounts.forms.get_extended_profile_model")
     def test_get_extended_profile_form_no_model_configured(self, mock_get_model: Mock):
@@ -152,6 +158,7 @@ class TestGetExtendedProfileForm(TestCase):
         mock_get_model.return_value = mock_model
         mock_form_instance = Mock()
         mock_form_instance.is_valid.return_value = True
+        mock_form_instance.fields = {"department": Mock()}
         mock_get_form.return_value = mock_form_instance
         extended_profile_fields_data = {"department": "Engineering"}
 
@@ -174,6 +181,7 @@ class TestGetExtendedProfileForm(TestCase):
         mock_get_model.return_value = mock_model
         mock_form_instance = Mock()
         mock_form_instance.is_valid.return_value = True
+        mock_form_instance.fields = {"department": Mock()}
         mock_get_form.return_value = mock_form_instance
         extended_profile_fields_data = {"department": "Engineering"}
 
@@ -193,8 +201,9 @@ class TestGetExtendedProfileForm(TestCase):
         mock_form_instance = Mock()
         mock_form_instance.is_valid.return_value = False
         mock_form_instance.errors = {"department": ["This field is required"], "title": ["Invalid value"]}
+        mock_form_instance.fields = {"department": Mock(), "title": Mock()}
         mock_get_form.return_value = mock_form_instance
-        extended_profile_fields_data = {}
+        extended_profile_fields_data = {"department": "Engineering"}
 
         form, errors = get_extended_profile_form(extended_profile_fields_data, self.user)
 
@@ -227,12 +236,22 @@ class TestGetExtendedProfileForm(TestCase):
         mock_get_form.side_effect = Exception("Unexpected error")
         extended_profile_fields_data = {"department": "Engineering"}
 
-        with patch("openedx.core.djangoapps.user_api.accounts.forms.get_extended_profile_model"):
+        with (
+            patch("openedx.core.djangoapps.user_api.accounts.forms.get_extended_profile_model"),
+            patch(
+                "openedx.core.djangoapps.user_api.accounts.forms.get_extended_profile_field_names",
+                return_value=({"department"}, {"department"}),
+            ),
+        ):
             form, errors = get_extended_profile_form(extended_profile_fields_data, self.user)
 
         self.assertIsNone(form)  # noqa: PT009
         self.assertIn("extended_profile", errors)  # noqa: PT009
         self.assertIn("Error creating custom form", errors["extended_profile"]["developer_message"])  # noqa: PT009
+        self.assertEqual(  # noqa: PT009
+            errors["extended_profile"]["user_message"],
+            "There was an error processing the extended profile information",
+        )
 
 
 class TestValidateAndGetExtendedProfileForm(TestCase):
@@ -243,6 +262,12 @@ class TestValidateAndGetExtendedProfileForm(TestCase):
     def setUp(self):
         super().setUp()
         self.user = UserFactory.create()
+        field_names_patch = patch(
+            "openedx.core.djangoapps.user_api.accounts.forms.get_extended_profile_field_names",
+            return_value=({"department", "title"}, {"department", "title"}),
+        )
+        field_names_patch.start()
+        self.addCleanup(field_names_patch.stop)
 
     @patch("openedx.core.djangoapps.user_api.accounts.forms.get_extended_profile_form")
     @patch("openedx.core.djangoapps.user_api.accounts.forms.extract_extended_profile_fields_data")

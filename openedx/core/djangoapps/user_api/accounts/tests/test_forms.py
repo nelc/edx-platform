@@ -248,10 +248,10 @@ class TestGetExtendedProfileForm(TestCase):
         self.assertIsNone(form)  # noqa: PT009
         self.assertIn("extended_profile", errors)  # noqa: PT009
         self.assertIn("Error creating custom form", errors["extended_profile"]["developer_message"])  # noqa: PT009
-        self.assertEqual(
+        self.assertEqual(  # noqa: PT009
             errors["extended_profile"]["user_message"],
             "There was an error processing the extended profile information",
-        )  # noqa: PT009
+        )
 
 
 class TestValidateAndGetExtendedProfileForm(TestCase):

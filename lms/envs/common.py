@@ -5627,3 +5627,19 @@ USE_EXTRACTED_PROBLEM_BLOCK = False
 # .. toggle_creation_date: 2024-11-10
 # .. toggle_target_removal_date: 2025-06-01
 USE_EXTRACTED_VIDEO_BLOCK = False
+
+# .. toggle_name: SAML_METADATA_URL_ALLOW_PRIVATE_IPS
+# .. toggle_default: False
+# .. toggle_implementation: DjangoSetting
+# .. toggle_description: When False (the default), fetching SAML metadata from
+#   private IP address ranges (RFC 1918: 10.x, 172.16.x, 192.168.x) is blocked
+#   as a defense against SSRF attacks. Set to True only in deployments where the
+#   SAML Identity Provider is hosted on the same private network as the Open edX
+#   server. Note: loopback (127.x) and link-local (169.254.x) addresses remain
+#   blocked regardless of this setting. Operators are also encouraged to enforce
+#   network-level egress filtering as a complementary control, particularly to
+#   cover hostname-based URLs that are not subject to IP validation.
+# .. toggle_use_cases: open_edx
+# .. toggle_creation_date: 2026-10-01
+# .. toggle_tickets: https://github.com/openedx/openedx-platform/commit/70a56246dd9c9df57c596e64bdd8a11b1d9da054
+SAML_METADATA_URL_ALLOW_PRIVATE_IPS = False

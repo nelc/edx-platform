@@ -786,7 +786,7 @@ class StudentsUpdateEnrollmentView(DeveloperErrorViewMixin, APIView):
 
         Parameters:
         - action (str): 'enroll' or 'unenroll'
-        - identifiers (str): comma/newline separated emails or usernames
+        - identifiers (str): comma/newline separated emails, usernames or (NELC) National IDs of existing accounts
         - auto_enroll (bool): auto-enroll in verified track if applicable
         - email_students (bool): whether to send enrollment emails
         - async_processing (bool): whether to process asynchronously
@@ -855,7 +855,7 @@ class StudentsUpdateEnrollmentView(DeveloperErrorViewMixin, APIView):
         if async_processing:
             return self._submit_async_enrollment(
                 request, course_key, action, identifiers, auto_enroll, email_students, reason, secure, site_id,
-                auto_switch_limit,
+                auto_switch_limit, allow_national_id=guard_ui_request,
             )
 
         if not guard_ui_request:
@@ -877,14 +877,15 @@ class StudentsUpdateEnrollmentView(DeveloperErrorViewMixin, APIView):
             )
         try:
             return self._process_enrollment_sync(
-                request.user, course_key, action, identifiers, auto_enroll, email_students, reason, secure
+                request.user, course_key, action, identifiers, auto_enroll, email_students, reason, secure,
+                allow_national_id=True,  # NELC: instructor-dashboard POST only
             )
         finally:
             cache.delete(lock_key)
 
     def _submit_async_enrollment(
         self, request, course_key, action, identifiers, auto_enroll, email_students, reason, secure, site_id,
-        auto_switch_limit,
+        auto_switch_limit, allow_national_id=False,
     ):
         """
         NELC: submit the batch as one async task, or as several when it does not fit in one task's input.
@@ -895,7 +896,7 @@ class StudentsUpdateEnrollmentView(DeveloperErrorViewMixin, APIView):
         try:
             # An empty list still gets one (empty) task, as before.
             chunks = task_api.split_enrollment_identifiers(
-                action, identifiers, auto_enroll, email_students, reason, secure, site_id
+                action, identifiers, auto_enroll, email_students, reason, secure, site_id, allow_national_id
             ) or [[]]
         except ValueError as exc:
             raise _BatchEnrollmentRejected(str(exc), 400) from exc
@@ -913,6 +914,7 @@ class StudentsUpdateEnrollmentView(DeveloperErrorViewMixin, APIView):
                     reason=reason,
                     secure=secure,
                     site_id=site_id,
+                    allow_national_id=allow_national_id,
                 ))
             except AlreadyRunningError:
                 payload = {
@@ -966,6 +968,7 @@ class StudentsUpdateEnrollmentView(DeveloperErrorViewMixin, APIView):
         email_students: bool,
         reason: str | None,
         secure: bool,
+        allow_national_id: bool = False,
     ):
         """
         Process student enrollment/unenrollment operations synchronously.
@@ -984,6 +987,7 @@ class StudentsUpdateEnrollmentView(DeveloperErrorViewMixin, APIView):
             email_students (bool): Whether to send enrollment notification emails
             reason (str | None): Optional reason for the enrollment change
             secure (bool): Whether the request was made over HTTPS
+            allow_national_id (bool): NELC. Accept National IDs of existing accounts among the identifiers
 
         Returns:
             dict: Enrollment operation results containing:
@@ -1000,6 +1004,7 @@ class StudentsUpdateEnrollmentView(DeveloperErrorViewMixin, APIView):
             email_students=email_students,
             reason=reason,
             secure=secure,
+            allow_national_id=allow_national_id,  # NELC
         )
 
         return {

@@ -731,6 +731,19 @@ such that the value can be defined later than this assignment (file load order).
             return this.$task_response.append($taskResSection);
         };
 
+        // NELC: a line typed as a National ID is shown with the account it resolved to, and a line that could not
+        // be resolved is shown with the reason, so the team can match each result to what they typed.
+        var describeResult = function(sr) {
+            var text = sr.identifier;
+            if (sr.resolved_email) {
+                text += ' \u2192 ' + sr.resolved_username + ' <' + sr.resolved_email + '>';
+            }
+            if (sr.error_message && String(sr.error_type).indexOf('national_id') === 0) {
+                text += ' \u2014 ' + sr.error_message;
+            }
+            return text;
+        };
+
         batchEnrollment.prototype.display_response = function(dataFromServer) {
             var allowed, autoenrolled, enrolled, errors, errorsLabel,
                 invalidIdentifier, notenrolled, notunenrolled, renderList, sr, studentResults,
@@ -815,7 +828,7 @@ such that the value can be defined later than this assignment (file load order).
                     results = [];
                     for (m = 0, len4 = invalidIdentifier.length; m < len4; m++) {
                         sr = invalidIdentifier[m];
-                        results.push(sr.identifier);
+                        results.push(describeResult(sr));
                     }
                     return results;
                 }()));
@@ -837,7 +850,7 @@ such that the value can be defined later than this assignment (file load order).
                         results = [];
                     for (k = 0, len = errs.length; k < len; k++) {
                         srItem = errs[k];
-                        results.push(srItem.identifier);
+                        results.push(describeResult(srItem));
                     }
                     return results;
                 };
@@ -852,7 +865,7 @@ such that the value can be defined later than this assignment (file load order).
                     results = [];
                     for (k = 0, len2 = enrolled.length; k < len2; k++) {
                         sr = enrolled[k];
-                        results.push(sr.identifier);
+                        results.push(describeResult(sr));
                     }
                     return results;
                 }()));
@@ -864,7 +877,7 @@ such that the value can be defined later than this assignment (file load order).
                     results = [];
                     for (k = 0, len2 = enrolled.length; k < len2; k++) {
                         sr = enrolled[k];
-                        results.push(sr.identifier);
+                        results.push(describeResult(sr));
                     }
                     return results;
                 }()));
@@ -876,7 +889,7 @@ such that the value can be defined later than this assignment (file load order).
                     results = [];
                     for (k = 0, len2 = allowed.length; k < len2; k++) {
                         sr = allowed[k];
-                        results.push(sr.identifier);
+                        results.push(describeResult(sr));
                     }
                     return results;
                 }()));
@@ -888,7 +901,7 @@ such that the value can be defined later than this assignment (file load order).
                     results = [];
                     for (k = 0, len2 = allowed.length; k < len2; k++) {
                         sr = allowed[k];
-                        results.push(sr.identifier);
+                        results.push(describeResult(sr));
                     }
                     return results;
                 }()));
@@ -900,7 +913,7 @@ such that the value can be defined later than this assignment (file load order).
                     results = [];
                     for (k = 0, len2 = autoenrolled.length; k < len2; k++) {
                         sr = autoenrolled[k];
-                        results.push(sr.identifier);
+                        results.push(describeResult(sr));
                     }
                     return results;
                 }()));
@@ -912,7 +925,7 @@ such that the value can be defined later than this assignment (file load order).
                     results = [];
                     for (k = 0, len2 = autoenrolled.length; k < len2; k++) {
                         sr = autoenrolled[k];
-                        results.push(sr.identifier);
+                        results.push(describeResult(sr));
                     }
                     return results;
                 }()));
@@ -924,7 +937,7 @@ such that the value can be defined later than this assignment (file load order).
                     results = [];
                     for (k = 0, len2 = notenrolled.length; k < len2; k++) {
                         sr = notenrolled[k];
-                        results.push(sr.identifier);
+                        results.push(describeResult(sr));
                     }
                     return results;
                 }()));
@@ -936,7 +949,7 @@ such that the value can be defined later than this assignment (file load order).
                     results = [];
                     for (k = 0, len2 = notenrolled.length; k < len2; k++) {
                         sr = notenrolled[k];
-                        results.push(sr.identifier);
+                        results.push(describeResult(sr));
                     }
                     return results;
                 }()));
@@ -947,7 +960,7 @@ such that the value can be defined later than this assignment (file load order).
                     results = [];
                     for (k = 0, len2 = notunenrolled.length; k < len2; k++) {
                         sr = notunenrolled[k];
-                        results.push(sr.identifier);
+                        results.push(describeResult(sr));
                     }
                     return results;
                 }()));

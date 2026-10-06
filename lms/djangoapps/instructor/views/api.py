@@ -8,6 +8,7 @@ Many of these GETs may become PUTs in the future.
 
 import csv
 import datetime
+import hashlib
 import json
 import logging
 import string
@@ -18,6 +19,7 @@ import dateutil
 import pytz
 import edx_api_doc_tools as apidocs
 from django.conf import settings
+from django.core.cache import cache
 from django.contrib.auth.models import User  # lint-amnesty, pylint: disable=imported-auth-user
 from django.core.exceptions import MultipleObjectsReturned, ObjectDoesNotExist, PermissionDenied, ValidationError
 from django.core.validators import validate_email
@@ -94,7 +96,7 @@ from lms.djangoapps.instructor_analytics import basic as instructor_analytics_ba
 from lms.djangoapps.instructor_task import api as task_api
 from lms.djangoapps.instructor_task.api_helper import AlreadyRunningError, QueueConnectionError
 from lms.djangoapps.instructor_task.data import InstructorTaskTypes
-from lms.djangoapps.instructor_task.models import ReportStore
+from lms.djangoapps.instructor_task.models import ReportStore, TaskInputTooLongError
 from lms.djangoapps.instructor.views.serializer import (
     AccessSerializer,
     BlockDueDateSerializer,
@@ -753,6 +755,18 @@ def create_and_enroll_user(
     return errors
 
 
+class _BatchEnrollmentRejected(Exception):
+    """
+    NELC: a batch enrollment request that is refused with a JSON `{"error": message}` and an HTTP status
+    (400 = cannot be processed as sent, 409 = the same batch is already being processed).
+    """
+
+    def __init__(self, message, http_status):
+        super().__init__(message)
+        self.message = message
+        self.http_status = http_status
+
+
 @method_decorator(cache_control(no_cache=True, no_store=True, must_revalidate=True), name='dispatch')
 @method_decorator(transaction.non_atomic_requests, name='dispatch')
 class StudentsUpdateEnrollmentView(DeveloperErrorViewMixin, APIView):
@@ -780,15 +794,21 @@ class StudentsUpdateEnrollmentView(DeveloperErrorViewMixin, APIView):
         Returns:
         - JSON response with action, auto_enroll flag, and enrollment results.
          """
-        response_payload = self._process_student_enrollment(
-            request=request,
-            course_id=course_id,
-            data=request.data,
-            secure=request.is_secure()
-        )
+        try:
+            response_payload = self._process_student_enrollment(
+                request=request,
+                course_id=course_id,
+                data=request.data,
+                secure=request.is_secure(),
+                guard_ui_request=True,  # NELC
+            )
+        except _BatchEnrollmentRejected as rejected:  # NELC
+            return JsonResponse({'error': rejected.message}, status=rejected.http_status)
         return JsonResponse(response_payload)
 
-    def _process_student_enrollment(self, request, course_id, data, secure):  # pylint: disable=too-many-statements
+    def _process_student_enrollment(  # pylint: disable=too-many-statements
+        self, request, course_id, data, secure, guard_ui_request=False
+    ):
         """
         Core logic for enrolling or unenrolling students.
 
@@ -796,6 +816,9 @@ class StudentsUpdateEnrollmentView(DeveloperErrorViewMixin, APIView):
         :param course_id: Course identifier
         :param data: Request data containing action, identifiers, etc.
         :param secure: Whether the request is secure (HTTPS)
+        :param guard_ui_request: NELC. True only for the instructor-dashboard POST: large synchronous batches
+            are switched to async processing and a synchronous batch takes a duplicate-submission lock. Left
+            False for the internal caller (bulk_enroll API), whose contract is a synchronous `results` list.
         """
 
         # Validate request data with serializer
@@ -818,43 +841,119 @@ class StudentsUpdateEnrollmentView(DeveloperErrorViewMixin, APIView):
         site = get_current_site()
         site_id = site.id if site else None
 
-        if async_processing:
+        # NELC: a batch above the synchronous limit runs in the background instead of risking the proxy timeout.
+        auto_switch_limit = None
+        if guard_ui_request and not async_processing:
+            sync_limit = (
+                settings.BATCH_ENROLLMENT_SYNC_MAX_NOTIFY if email_students else settings.BATCH_ENROLLMENT_SYNC_MAX
+            )
+            if len(identifiers) > sync_limit:
+                async_processing = True
+                auto_switch_limit = sync_limit
 
+        if async_processing:
+            return self._submit_async_enrollment(
+                request, course_key, action, identifiers, auto_enroll, email_students, reason, secure, site_id,
+                auto_switch_limit,
+            )
+
+        if not guard_ui_request:
+            return self._process_enrollment_sync(
+                request.user, course_key, action, identifiers, auto_enroll, email_students, reason, secure
+            )
+
+        # NELC: one synchronous run per (course, action, identifiers) at a time. A browser that gave up on a slow
+        # request re-submits it, but the first request keeps running server-side, so the lock is what stops the
+        # second run (and a second round of emails). Released when the request ends; expires on its own if the
+        # worker dies.
+        lock_stub = f"{course_key}_{action}_{json.dumps(sorted(identifiers))}"
+        lock_key = "batch_enrollment_sync_lock_" + hashlib.md5(lock_stub.encode("utf-8")).hexdigest()
+        if not cache.add(lock_key, True, settings.BATCH_ENROLLMENT_LOCK_TIMEOUT_SECONDS):
+            raise _BatchEnrollmentRejected(
+                _("This batch is already being processed. Please wait for it to finish; "
+                  "do not submit it again."),
+                409,
+            )
+        try:
+            return self._process_enrollment_sync(
+                request.user, course_key, action, identifiers, auto_enroll, email_students, reason, secure
+            )
+        finally:
+            cache.delete(lock_key)
+
+    def _submit_async_enrollment(
+        self, request, course_key, action, identifiers, auto_enroll, email_students, reason, secure, site_id,
+        auto_switch_limit,
+    ):
+        """
+        NELC: submit the batch as one async task, or as several when it does not fit in one task's input.
+
+        `auto_switch_limit` is the synchronous limit that was exceeded when the batch was switched to async
+        automatically (None when the instructor ticked "Process asynchronously" themselves).
+        """
+        try:
+            # An empty list still gets one (empty) task, as before.
+            chunks = task_api.split_enrollment_identifiers(
+                action, identifiers, auto_enroll, email_students, reason, secure, site_id
+            ) or [[]]
+        except ValueError as exc:
+            raise _BatchEnrollmentRejected(str(exc), 400) from exc
+
+        tasks = []
+        for chunk in chunks:
             try:
-                instructor_task = task_api.submit_student_enrollment_batch(
+                tasks.append(task_api.submit_student_enrollment_batch(
                     request=request,
                     course_key=course_key,
                     action=action,
-                    identifiers=identifiers,
+                    identifiers=chunk,
                     auto_enroll=auto_enroll,
                     email_students=email_students,
                     reason=reason,
                     secure=secure,
                     site_id=site_id,
-                )
-
-                return {
-                    "action": action,
-                    "auto_enroll": auto_enroll,
-                    "async_processing": True,
-                    "task_id": instructor_task.task_id,
-                    "task_state": instructor_task.task_state,
-                    "message": f"Async {action} task submitted for {len(identifiers)} students",
-                    "total_students": len(identifiers),
-                }
-
+                ))
             except AlreadyRunningError:
-                return {
+                payload = {
                     "action": action,
                     "auto_enroll": auto_enroll,
                     "async_processing": True,
-                    "error": "A similar enrollment task is already running. Please wait for it to complete.",
+                    "error": _("A similar enrollment task is already running. Please wait for it to complete."),
                     "total_students": len(identifiers),
                 }
+                if tasks:
+                    # Earlier chunks were already queued: say so rather than hide it.
+                    payload["error"] += " " + _(
+                        "%(done)d of %(total)d background tasks were already submitted."
+                    ) % {"done": len(tasks), "total": len(chunks)}
+                    payload["task_ids"] = [task.task_id for task in tasks]
+                return payload
+            except TaskInputTooLongError as exc:
+                raise _BatchEnrollmentRejected(
+                    _("The list of learners is too long to be processed in the background. "
+                      "Please split it into smaller lists."),
+                    400,
+                ) from exc
 
-        return self._process_enrollment_sync(
-            request.user, course_key, action, identifiers, auto_enroll, email_students, reason, secure
-        )
+        message = f"Async {action} task submitted for {len(identifiers)} students"
+        payload = {
+            "action": action,
+            "auto_enroll": auto_enroll,
+            "async_processing": True,
+            "task_id": tasks[0].task_id,
+            "task_state": tasks[0].task_state,
+            "message": message,
+            "total_students": len(identifiers),
+        }
+        if len(tasks) > 1:
+            payload["task_ids"] = [task.task_id for task in tasks]
+            payload["message"] = f"{message} as {len(tasks)} background tasks"
+        if auto_switch_limit is not None:
+            # Tells the dashboard (membership.js) why the instructor got a background-task message.
+            payload["auto_switched_to_async"] = True
+            payload["sync_limit"] = auto_switch_limit
+            payload["message"] += f" (batch above the {auto_switch_limit}-learner limit for immediate processing)"
+        return payload
 
     def _process_enrollment_sync(
         self,

@@ -32,6 +32,7 @@ from lms.djangoapps.instructor_task.api import (
     get_running_instructor_tasks,
     process_scheduled_instructor_tasks,
     regenerate_certificates,
+    split_enrollment_identifiers,
     submit_bulk_course_email,
     submit_calculate_may_enroll_csv,
     submit_calculate_problem_responses_csv,
@@ -52,7 +53,7 @@ from lms.djangoapps.instructor_task.api import (
 )
 from lms.djangoapps.instructor_task.api_helper import AlreadyRunningError, QueueConnectionError
 from lms.djangoapps.instructor_task.data import InstructorTaskTypes
-from lms.djangoapps.instructor_task.models import PROGRESS, SCHEDULED, InstructorTask
+from lms.djangoapps.instructor_task.models import PROGRESS, SCHEDULED, TASK_INPUT_LENGTH, InstructorTask
 from lms.djangoapps.instructor_task.tasks import (
     export_ora2_data,
     export_ora2_submission_files,
@@ -647,3 +648,62 @@ class SubmitStudentEnrollmentBatchTests(InstructorTaskCourseTestCase):
                 reason=None,
                 secure=False,
             )
+
+
+class SplitEnrollmentIdentifiersTests(InstructorTaskCourseTestCase):
+    """
+    NELC: tests for split_enrollment_identifiers (a large batch becomes several async tasks).
+    """
+
+    def _split(self, identifiers, reason="test"):
+        return split_enrollment_identifiers("enroll", identifiers, True, False, reason, True, None)
+
+    def _input_size(self, identifiers, reason="test"):
+        # same shape submit_student_enrollment_batch stores
+        return len(json.dumps({
+            "action": "enroll", "identifiers": identifiers, "auto_enroll": True, "email_students": False,
+            "reason": reason, "secure": True, "site_id": None,
+        }))
+
+    def test_small_batch_is_one_chunk_in_order(self):
+        identifiers = ["u1", "u2", "u3@example.com"]
+        self.assertEqual(self._split(identifiers), [identifiers])  # noqa: PT009
+
+    def test_empty_batch_has_no_chunks(self):
+        self.assertEqual(self._split([]), [])  # noqa: PT009
+
+    def test_large_batch_is_split_and_every_chunk_fits(self):
+        identifiers = [f"learner-{i:06d}@example.com" for i in range(5000)]  # ~165 KB of JSON
+
+        chunks = self._split(identifiers)
+
+        self.assertGreater(len(chunks), 1)  # noqa: PT009
+        for chunk in chunks:
+            self.assertLessEqual(self._input_size(chunk), TASK_INPUT_LENGTH)  # noqa: PT009
+        # nothing lost, nothing duplicated, order kept
+        self.assertEqual([i for chunk in chunks for i in chunk], identifiers)  # noqa: PT009
+        # greedy: only the last chunk may be short, and the next identifier would not have fitted
+        for chunk, following in zip(chunks, chunks[1:]):
+            self.assertGreater(self._input_size(chunk + [following[0]]), TASK_INPUT_LENGTH)  # noqa: PT009
+
+    def test_chunks_get_distinct_task_keys(self):
+        identifiers = [f"learner-{i:06d}@example.com" for i in range(5000)]
+        keys = {
+            hashlib.md5(f"c_enroll_{json.dumps(sorted(chunk))}".encode("utf-8")).hexdigest()
+            for chunk in self._split(identifiers)
+        }
+        self.assertEqual(len(keys), len(self._split(identifiers)))  # noqa: PT009
+
+    def test_non_ascii_identifiers_are_measured_as_stored(self):
+        # json.dumps escapes non-ASCII to \uXXXX (6 chars each), so size must be measured on the JSON, not on len().
+        identifiers = ["\u0645\u062a\u0639\u0644\u0645" * 4 + str(i) for i in range(3000)]
+        for chunk in self._split(identifiers):
+            self.assertLessEqual(self._input_size(chunk), TASK_INPUT_LENGTH)  # noqa: PT009
+
+    def test_oversized_reason_is_refused_not_truncated(self):
+        with pytest.raises(ValueError):
+            self._split(["u1"], reason="r" * TASK_INPUT_LENGTH)
+
+    def test_oversized_single_identifier_is_refused(self):
+        with pytest.raises(ValueError):
+            self._split(["x" * TASK_INPUT_LENGTH])

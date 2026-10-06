@@ -32,7 +32,12 @@ from lms.djangoapps.instructor_task.api_helper import (
     submit_scheduled_task,
 )
 from lms.djangoapps.instructor_task.data import InstructorTaskTypes
-from lms.djangoapps.instructor_task.models import InstructorTask, InstructorTaskSchedule, SCHEDULED
+from lms.djangoapps.instructor_task.models import (
+    InstructorTask,
+    InstructorTaskSchedule,
+    SCHEDULED,
+    TASK_INPUT_LENGTH,
+)
 from lms.djangoapps.instructor_task.tasks import (
     calculate_grades_csv,
     calculate_may_enroll_csv,
@@ -593,6 +598,72 @@ def process_scheduled_instructor_tasks():
             log.error(f"Error processing scheduled task with task id '{schedule.task.id}': {exc}")
 
 
+def _student_enrollment_task_input(action, identifiers, auto_enroll, email_students, reason, secure, site_id):
+    """
+    NELC: the `task_input` dict of a STUDENT_ENROLLMENT_BATCH task (extracted so the size of an input can be
+    computed by split_enrollment_identifiers with exactly the same shape that submit_student_enrollment_batch stores).
+    """
+    return {
+        "action": action,
+        "identifiers": identifiers,
+        "auto_enroll": auto_enroll,
+        "email_students": email_students,
+        "reason": reason,
+        "secure": secure,
+        "site_id": site_id,
+    }
+
+
+def split_enrollment_identifiers(
+    action: str,
+    identifiers: list[str],
+    auto_enroll: bool,
+    email_students: bool,
+    reason: str | None,
+    secure: bool,
+    site_id: int | None = None,
+) -> list[list[str]]:
+    """
+    NELC: split `identifiers` into the fewest ordered chunks whose JSON `task_input` each fits in
+    TASK_INPUT_LENGTH, so a large batch becomes several async tasks instead of an HTTP 500.
+
+    Each chunk gets its own task_key (it hashes the identifiers), so chunks never collide with each other.
+
+    Raises:
+        ValueError: if even an EMPTY chunk, or a single identifier, cannot fit (e.g. a huge `reason`).
+            Nothing is truncated.
+    """
+    def size_of(ids):
+        return len(json.dumps(_student_enrollment_task_input(
+            action, ids, auto_enroll, email_students, reason, secure, site_id
+        )))
+
+    base = size_of([])  # includes the "[]" of the empty identifier list
+    if base > TASK_INPUT_LENGTH:
+        raise ValueError(
+            f"The request is too large to be processed in the background ({base} > {TASK_INPUT_LENGTH} characters "
+            "before any identifier is added). Shorten the reason text."
+        )
+
+    chunks, current, current_size = [], [], base
+    for identifier in identifiers:
+        own_size = len(json.dumps(identifier))
+        if base + own_size > TASK_INPUT_LENGTH:
+            raise ValueError(
+                f"A single identifier is too long to be processed in the background (limit {TASK_INPUT_LENGTH})."
+            )
+        # json.dumps joins list items with ", " (2 characters); the first item of a chunk has no separator.
+        item_size = own_size + (2 if current else 0)
+        if current_size + item_size > TASK_INPUT_LENGTH:
+            chunks.append(current)
+            current, current_size, item_size = [], base, own_size
+        current.append(identifier)
+        current_size += item_size
+    if current:
+        chunks.append(current)
+    return chunks
+
+
 def submit_student_enrollment_batch(
     request: HttpRequest,
     course_key: CourseKey,
@@ -630,15 +701,9 @@ def submit_student_enrollment_batch(
     task_type = InstructorTaskTypes.STUDENT_ENROLLMENT_BATCH
     task_class = student_enrollment_batch
 
-    task_input = {
-        "action": action,
-        "identifiers": identifiers,
-        "auto_enroll": auto_enroll,
-        "email_students": email_students,
-        "reason": reason,
-        "secure": secure,
-        "site_id": site_id,
-    }
+    task_input = _student_enrollment_task_input(
+        action, identifiers, auto_enroll, email_students, reason, secure, site_id
+    )
 
     task_key_stub = f"{course_key}_{action}_{json.dumps(sorted(identifiers))}"
     task_key = hashlib.md5(task_key_stub.encode("utf-8")).hexdigest()

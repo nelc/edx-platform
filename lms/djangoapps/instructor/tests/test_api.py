@@ -18,9 +18,10 @@ from botocore.exceptions import ClientError
 from django.conf import settings
 from django.contrib.auth.models import User  # lint-amnesty, pylint: disable=imported-auth-user
 from django.core import mail
+from django.core.cache import cache
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.http import HttpRequest, HttpResponse
-from django.test import RequestFactory, TestCase
+from django.test import RequestFactory, TestCase, override_settings
 from django.test.client import MULTIPART_CONTENT
 from django.urls import reverse as django_reverse
 from django.utils.translation import gettext as _
@@ -91,7 +92,7 @@ from lms.djangoapps.instructor_task.api_helper import (
     generate_already_running_error_message
 )
 from lms.djangoapps.instructor_task.data import InstructorTaskTypes
-from lms.djangoapps.instructor_task.models import InstructorTask, InstructorTaskSchedule
+from lms.djangoapps.instructor_task.models import InstructorTask, InstructorTaskSchedule, TaskInputTooLongError
 from lms.djangoapps.program_enrollments.tests.factories import ProgramEnrollmentFactory
 from openedx.core.djangoapps.course_date_signals.handlers import extract_dates
 from openedx.core.djangoapps.course_groups.cohorts import set_course_cohorted
@@ -2027,6 +2028,163 @@ class TestInstructorAPIEnrollment(SharedModuleStoreTestCase, LoginEnrollmentTest
         self.assertIn(self.notenrolled_student.email, identifiers_list)  # noqa: PT009
         self.assertIn(student2.email, identifiers_list)  # noqa: PT009
         self.assertIn(student3.email, identifiers_list)  # noqa: PT009
+
+    # --- NELC: bulk-enroll limits (auto-switch to async, chunking, duplicate-submission guards) ---
+
+    def _post_enrollment(self, identifiers, **extra):
+        """POST a batch to students_update_enrollment; return the raw response."""
+        url = reverse("students_update_enrollment", kwargs={"course_id": str(self.course.id)})
+        data = {"identifiers": ",".join(identifiers), "action": "enroll", **extra}
+        return self.client.post(url, data)
+
+    @staticmethod
+    def _emails(count):
+        return [f"bulk-{i}@example.com" for i in range(count)]
+
+    @staticmethod
+    def _fake_task(index):
+        return Mock(task_id=f"task-{index}", task_state="QUEUING")
+
+    @override_settings(BATCH_ENROLLMENT_SYNC_MAX_NOTIFY=2, BATCH_ENROLLMENT_SYNC_MAX=3)
+    @patch("lms.djangoapps.instructor.views.api.process_student_enrollment_batch")
+    @patch("lms.djangoapps.instructor_task.api.submit_student_enrollment_batch")
+    def test_batch_above_notify_limit_switches_to_async(self, mock_submit_task, mock_sync_batch):
+        """Sync + notify ON + more learners than BATCH_ENROLLMENT_SYNC_MAX_NOTIFY -> background task."""
+        mock_submit_task.return_value = self._fake_task(1)
+
+        response = self._post_enrollment(self._emails(3), email_students=True)
+
+        assert response.status_code == 200
+        res_json = json.loads(response.content.decode("utf-8"))
+        assert res_json["async_processing"] is True
+        assert res_json["auto_switched_to_async"] is True
+        assert res_json["sync_limit"] == 2
+        assert res_json["task_id"] == "task-1"
+        assert res_json["total_students"] == 3
+        assert "limit" in res_json["message"]
+        mock_submit_task.assert_called_once()
+        mock_sync_batch.assert_not_called()
+
+    @override_settings(BATCH_ENROLLMENT_SYNC_MAX_NOTIFY=2, BATCH_ENROLLMENT_SYNC_MAX=3)
+    @patch("lms.djangoapps.instructor_task.api.submit_student_enrollment_batch")
+    def test_batch_without_notify_uses_the_larger_limit(self, mock_submit_task):
+        """Notify OFF -> BATCH_ENROLLMENT_SYNC_MAX applies: 3 learners stay synchronous, 4 switch."""
+        mock_submit_task.return_value = self._fake_task(1)
+
+        sync_response = self._post_enrollment(self._emails(3), email_students=False)
+        assert "results" in json.loads(sync_response.content.decode("utf-8"))
+        mock_submit_task.assert_not_called()
+
+        async_response = self._post_enrollment(self._emails(4), email_students=False)
+        res_json = json.loads(async_response.content.decode("utf-8"))
+        assert res_json["auto_switched_to_async"] is True
+        assert res_json["sync_limit"] == 3
+
+    @override_settings(BATCH_ENROLLMENT_SYNC_MAX_NOTIFY=2)
+    @patch("lms.djangoapps.instructor_task.api.submit_student_enrollment_batch")
+    def test_batch_exactly_at_the_limit_stays_synchronous(self, mock_submit_task):
+        response = self._post_enrollment(self._emails(2), email_students=True)
+
+        assert response.status_code == 200
+        assert "results" in json.loads(response.content.decode("utf-8"))
+        mock_submit_task.assert_not_called()
+
+    @override_settings(BATCH_ENROLLMENT_SYNC_MAX_NOTIFY=2)
+    @patch("lms.djangoapps.instructor_task.api.submit_student_enrollment_batch")
+    def test_ticked_async_is_not_reported_as_switched(self, mock_submit_task):
+        mock_submit_task.return_value = self._fake_task(1)
+
+        response = self._post_enrollment(self._emails(3), email_students=True, async_processing=True)
+
+        res_json = json.loads(response.content.decode("utf-8"))
+        assert "auto_switched_to_async" not in res_json
+        assert "task_ids" not in res_json
+
+    @patch("lms.djangoapps.instructor_task.api.TASK_INPUT_LENGTH", 400)
+    @patch("lms.djangoapps.instructor_task.api.submit_student_enrollment_batch")
+    def test_batch_too_big_for_one_task_is_split_into_chunks(self, mock_submit_task):
+        mock_submit_task.side_effect = [self._fake_task(i) for i in range(1, 20)]
+        identifiers = self._emails(30)
+
+        response = self._post_enrollment(identifiers, async_processing=True)
+
+        assert response.status_code == 200
+        res_json = json.loads(response.content.decode("utf-8"))
+        chunks = [call[1]["identifiers"] for call in mock_submit_task.call_args_list]
+        assert len(chunks) > 1
+        assert [i for chunk in chunks for i in chunk] == identifiers
+        assert res_json["task_ids"] == [f"task-{i}" for i in range(1, len(chunks) + 1)]
+        assert res_json["task_id"] == "task-1"
+        assert res_json["total_students"] == 30
+        assert f"{len(chunks)} background tasks" in res_json["message"]
+
+    @patch("lms.djangoapps.instructor_task.api.TASK_INPUT_LENGTH", 400)
+    @patch("lms.djangoapps.instructor_task.api.submit_student_enrollment_batch")
+    def test_already_running_chunk_reports_the_chunks_already_queued(self, mock_submit_task):
+        mock_submit_task.side_effect = [self._fake_task(1), AlreadyRunningError("running")]
+
+        response = self._post_enrollment(self._emails(30), async_processing=True)
+
+        res_json = json.loads(response.content.decode("utf-8"))
+        assert "already running" in res_json["error"].lower()
+        assert "1 of " in res_json["error"]
+        assert res_json["task_ids"] == ["task-1"]
+
+    @patch("lms.djangoapps.instructor_task.api.submit_student_enrollment_batch")
+    def test_unfittable_async_request_is_a_400_with_a_message(self, mock_submit_task):
+        """A `reason` too long for any task input is refused with a clear message, never truncated or a 500."""
+        response = self._post_enrollment(self._emails(2), async_processing=True, reason="r" * 70000)
+
+        assert response.status_code == 400
+        res_json = json.loads(response.content.decode("utf-8"))
+        assert "too large" in res_json["error"]
+        mock_submit_task.assert_not_called()
+
+    @patch("lms.djangoapps.instructor_task.api.submit_student_enrollment_batch")
+    def test_task_input_too_long_error_from_the_task_layer_is_a_400(self, mock_submit_task):
+        mock_submit_task.side_effect = TaskInputTooLongError("An error has occurred. Task was not created.")
+
+        response = self._post_enrollment(self._emails(2), async_processing=True)
+
+        assert response.status_code == 400
+        assert "too long" in json.loads(response.content.decode("utf-8"))["error"]
+
+    def test_identical_sync_batch_already_in_progress_is_a_409(self):
+        cache.clear()
+        with patch("lms.djangoapps.instructor.views.api.cache") as mock_cache, patch(
+            "lms.djangoapps.instructor.views.api.process_student_enrollment_batch"
+        ) as mock_sync_batch:
+            mock_cache.add.return_value = False  # someone else holds the lock
+
+            response = self._post_enrollment([self.notenrolled_student.email], email_students=False)
+
+        assert response.status_code == 409
+        assert "already being processed" in json.loads(response.content.decode("utf-8"))["error"]
+        mock_sync_batch.assert_not_called()
+        mock_cache.delete.assert_not_called()  # must not release a lock this request does not own
+
+    def test_sync_lock_is_released_after_the_request(self):
+        """Same batch twice in a row (not concurrently) is fine: the lock does not outlive the request."""
+        cache.clear()
+
+        first = self._post_enrollment([self.notenrolled_student.email], email_students=False)
+        second = self._post_enrollment([self.notenrolled_student.email], email_students=False)
+
+        assert first.status_code == 200
+        assert second.status_code == 200
+
+    def test_sync_lock_is_released_when_processing_fails(self):
+        cache.clear()
+        self.client.raise_request_exception = False
+        with patch(
+            "lms.djangoapps.instructor.views.api.process_student_enrollment_batch", side_effect=RuntimeError("boom")
+        ):
+            failed = self._post_enrollment([self.notenrolled_student.email], email_students=False)
+        assert failed.status_code == 500  # the failure is surfaced, not swallowed
+
+        retry = self._post_enrollment([self.notenrolled_student.email], email_students=False)
+
+        assert retry.status_code == 200
 
     def test_async_processing_default_false(self):
         """Test that async_processing defaults to False for backward compatibility"""

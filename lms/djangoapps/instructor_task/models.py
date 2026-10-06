@@ -39,8 +39,20 @@ logger = logging.getLogger(__name__)
 QUEUING = 'QUEUING'
 PROGRESS = 'PROGRESS'
 SCHEDULED = 'SCHEDULED'
-TASK_INPUT_LENGTH = 10000
+# NELC: raised from 10000. `task_input` is a TextField (MySQL TEXT = 65,535 bytes) and json.dumps() is
+# ASCII-escaped, so characters == bytes; 60000 leaves headroom under the column limit. No migration needed.
+# Larger enrollment batches are split into several tasks by instructor_task.api.split_enrollment_identifiers.
+TASK_INPUT_LENGTH = 60000
 DJANGO_STORE_STORAGE_CLASS = 'storages.backends.s3boto3.S3Boto3Storage'
+
+
+class TaskInputTooLongError(AttributeError):
+    """
+    NELC: raised by InstructorTask.create when the JSON task_input exceeds TASK_INPUT_LENGTH.
+
+    Subclasses AttributeError (what upstream raises) so existing `except AttributeError` callers and tests
+    keep working, while views can catch exactly this case instead of a bare AttributeError.
+    """
 
 
 class InstructorTask(models.Model):
@@ -113,7 +125,7 @@ class InstructorTask(models.Model):
                 course_id
             )
             error_msg = _('An error has occurred. Task was not created.')
-            raise AttributeError(error_msg)
+            raise TaskInputTooLongError(error_msg)  # NELC: was a bare AttributeError
 
         # create the task, then save it:
         instructor_task = cls(

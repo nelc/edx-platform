@@ -7,11 +7,14 @@ that can be used in both synchronous and asynchronous contexts.
 
 import logging
 from collections.abc import Callable
+from datetime import timedelta
 
+from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
 from django.core.validators import validate_email
 from django.db import transaction
+from django.utils import timezone
 from django.utils.translation import gettext as _
 from opaque_keys.edx.keys import CourseKey
 
@@ -88,6 +91,40 @@ def _determine_unenroll_state_transition(before_state: dict) -> str:
     return UNENROLLED_TO_UNENROLLED
 
 
+# NELC: audit transitions that already mean "this learner reached the state the instructor is asking for now".
+# ALLOWEDTOENROLL_* are left out on purpose: ALLOWEDTOENROLL_TO_ENROLLED and ALLOWEDTOENROLL_TO_UNENROLLED share the
+# same string upstream, so they cannot tell an enroll from an unenroll.
+_ALREADY_REACHED_TRANSITIONS = {
+    EnrollStatusChange.enroll: (UNENROLLED_TO_ENROLLED, ENROLLED_TO_ENROLLED),
+    EnrollStatusChange.unenroll: (ENROLLED_TO_UNENROLLED, UNENROLLED_TO_UNENROLLED),
+}
+
+
+def _was_recently_processed(course_key: CourseKey, email: str, action: str) -> bool:
+    """
+    NELC: True if the LATEST ManualEnrollmentAudit row shows this learner already reached the state `action` asks
+    for, in this course, within BATCH_ENROLLMENT_EMAIL_DEDUPE_SECONDS. Used only to avoid mailing the same learner
+    twice when an instructor re-submits a batch (the enrollment itself is idempotent).
+
+    The audit row has no course column, so it is scoped through its `enrollment` FK; invited-but-unregistered
+    learners have no enrollment row, so they are never treated as "recently processed".
+    """
+    window = settings.BATCH_ENROLLMENT_EMAIL_DEDUPE_SECONDS
+    if not window:
+        return False
+    # Only the LATEST row counts: enroll -> unenroll -> enroll again must still notify the second enroll.
+    latest = ManualEnrollmentAudit.objects.filter(
+        enrolled_email=email,
+        enrollment__course_id=course_key,
+    ).order_by("-time_stamp", "-id").first()
+    return bool(
+        latest
+        and latest.state_transition in _ALREADY_REACHED_TRANSITIONS.get(action, ())
+        and latest.time_stamp  # nullable column
+        and latest.time_stamp >= timezone.now() - timedelta(seconds=window)
+    )
+
+
 def process_single_student_enrollment(
     request_user: User,
     course_key: CourseKey,
@@ -137,6 +174,12 @@ def process_single_student_enrollment(
     try:
         validate_email(email)  # Raises ValidationError if invalid
 
+        # NELC: do not mail a learner twice for the same change (e.g. an instructor re-submitting a batch).
+        email_skipped = email_students and _was_recently_processed(course_key, email, action)
+        if email_skipped:
+            log.info("Skipping duplicate enrollment notification in course %s: learner was just processed", course_key)
+            email_students = False
+
         # Wrap enrollment and audit operations in an atomic transaction
         # to ensure both succeed or both are rolled back
         with transaction.atomic():
@@ -164,13 +207,16 @@ def process_single_student_enrollment(
                 request_user, email, state_transition, reason, enrollment_obj
             )
 
-        return {
+        result = {
             "identifier": identifier,
             "before": before_state,
             "after": after_state,
             "success": True,
             "state_transition": state_transition,
         }
+        if email_skipped:
+            result["email_skipped"] = True  # NELC
+        return result
     except ValidationError:
         return {
             "identifier": identifier,

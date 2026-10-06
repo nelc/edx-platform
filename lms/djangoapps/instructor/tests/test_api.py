@@ -15,6 +15,7 @@ import ddt
 import pytest
 import pytz
 from botocore.exceptions import ClientError
+from django.apps import apps
 from django.conf import settings
 from django.contrib.auth.models import User  # lint-amnesty, pylint: disable=imported-auth-user
 from django.core import mail
@@ -79,6 +80,7 @@ from lms.djangoapps.courseware.models import StudentModule
 from lms.djangoapps.courseware.tests.helpers import LoginEnrollmentTestCase
 from lms.djangoapps.instructor.tests.utils import FakeContentTask, FakeEmail, FakeEmailInfo
 from lms.djangoapps.instructor.views.api import (
+    StudentsUpdateEnrollmentView,
     _get_certificate_for_user,
     _get_student_from_request_data,
     _split_input_list,
@@ -2260,6 +2262,81 @@ class TestInstructorAPIEnrollment(SharedModuleStoreTestCase, LoginEnrollmentTest
 
         # Verify actual enrollment happened
         self.assertTrue(CourseEnrollment.is_enrolled(self.notenrolled_student, self.course.id))  # noqa: PT009
+
+    # --- NELC: National ID as a batch-enrollment identifier (instructor dashboard POST only) ---
+
+    def _give_national_id(self, user, national_id):
+        extra_info_model = apps.get_model("custom_reg_form", "ExtraInfo")
+        return extra_info_model.objects.create(user=user, arabic_name="x", national_id=national_id)
+
+    def _require_national_id_store(self):
+        try:
+            apps.get_model("custom_reg_form", "ExtraInfo")
+        except LookupError:
+            self.skipTest("custom_reg_form is not installed in this environment")
+
+    def test_dashboard_post_enrolls_the_account_that_owns_the_typed_national_id(self):
+        self._require_national_id_store()
+        self._give_national_id(self.notenrolled_student, "1012345678")
+
+        response = self._post_enrollment(
+            ["1012345678", self.enrolled_student.email, "2999999999"], email_students=False
+        )
+
+        assert response.status_code == 200
+        results = {r["identifier"]: r for r in json.loads(response.content.decode("utf-8"))["results"]}
+        found = results["1012345678"]
+        assert found["success"] is True
+        assert found["resolved_email"] == self.notenrolled_student.email
+        assert found["resolved_username"] == self.notenrolled_student.username
+        assert CourseEnrollment.is_enrolled(self.notenrolled_student, self.course.id)
+        missing = results["2999999999"]
+        assert missing["success"] is False
+        assert missing["error_message"] == "No account found with this National ID"
+        # an unknown ID creates no invitation of any kind
+        assert not CourseEnrollmentAllowed.objects.filter(email="2999999999").exists()
+
+    def test_dashboard_post_resolves_a_national_id_pasted_with_invisible_marks(self):
+        """Lists copied from Arabic Excel/Word carry RLM/ZWSP/BOM; the ID still resolves and stray marks vanish."""
+        self._require_national_id_store()
+        self._give_national_id(self.notenrolled_student, "1012345678")
+
+        response = self._post_enrollment(
+            ["\u200f1012345678\u200f", "\u200f", "\ufeff\u200b"], email_students=False
+        )
+
+        assert response.status_code == 200
+        results = json.loads(response.content.decode("utf-8"))["results"]
+        assert [r["identifier"] for r in results] == ["1012345678"]
+        assert results[0]["success"] is True
+        assert results[0]["resolved_email"] == self.notenrolled_student.email
+        assert CourseEnrollment.is_enrolled(self.notenrolled_student, self.course.id)
+
+    @patch("lms.djangoapps.instructor_task.api.submit_student_enrollment_batch")
+    def test_dashboard_async_post_flags_the_task_for_national_ids(self, mock_submit_task):
+        mock_submit_task.return_value = self._fake_task(1)
+
+        self._post_enrollment(["1012345678"], async_processing=True)
+
+        assert mock_submit_task.call_args[1]["allow_national_id"] is True
+
+    @patch("lms.djangoapps.instructor.views.api.process_student_enrollment_batch")
+    def test_internal_callers_such_as_bulk_enroll_do_not_resolve_national_ids(self, mock_sync_batch):
+        """lms.djangoapps.bulk_enroll calls _process_student_enrollment directly: its contract stays email/username."""
+        mock_sync_batch.return_value = {
+            "action": "enroll", "auto_enroll": False, "results": [],
+        }
+        request = RequestFactory().post("/")
+        request.user = self.instructor
+
+        StudentsUpdateEnrollmentView()._process_student_enrollment(  # pylint: disable=protected-access
+            request=request,
+            course_id=str(self.course.id),
+            data={"identifiers": "1012345678", "action": "enroll", "email_students": False},
+            secure=True,
+        )
+
+        assert mock_sync_batch.call_args[1]["allow_national_id"] is False
 
 
 @ddt.ddt

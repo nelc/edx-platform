@@ -9,6 +9,8 @@ from datetime import timedelta
 from unittest.mock import Mock, patch
 
 import ddt
+from django.apps import apps
+from django.core import mail
 from django.core.exceptions import ValidationError
 from django.test import TestCase, override_settings
 from django.utils import timezone
@@ -26,6 +28,7 @@ from common.djangoapps.student.models import (
     UNENROLLED_TO_UNENROLLED,
     CourseEnrollment,
     EnrollStatusChange,
+    CourseEnrollmentAllowed,
     ManualEnrollmentAudit,
 )
 from common.djangoapps.student.tests.factories import UserFactory
@@ -33,6 +36,7 @@ from lms.djangoapps.instructor.enrollment import EmailEnrollmentState
 from lms.djangoapps.instructor.utils import (
     _determine_enroll_state_transition,
     _determine_unenroll_state_transition,
+    _mask_if_national_id,
     process_single_student_enrollment,
     process_student_enrollment_batch,
 )
@@ -567,3 +571,244 @@ class TestProcessStudentEnrollmentBatch(TestCase):
         self.assertEqual(result["failed_operations"], 0)  # noqa: PT009
         self.assertEqual(len(result["results"]), 0)  # noqa: PT009
         mock_process_single.assert_not_called()
+
+
+def _has_national_id_store():
+    """True when the app that stores National IDs (custom_reg_form) is installed in this test environment."""
+    try:
+        apps.get_model("custom_reg_form", "ExtraInfo")
+    except LookupError:
+        return False
+    return True
+
+
+@ddt.ddt
+class TestNationalIdIdentifier(TestCase):
+    """
+    NELC: a National ID typed in the batch-enrollment box finds an EXISTING account and then behaves exactly as if
+    that account's username/email had been typed. Never an invite, never a fallback.
+    """
+
+    NATIONAL_ID = "1012345678"
+
+    def setUp(self):
+        super().setUp()
+        if not _has_national_id_store():
+            self.skipTest("custom_reg_form is not installed in this environment")
+        self.extra_info_model = apps.get_model("custom_reg_form", "ExtraInfo")
+        self.addCleanup(RequestCache.clear_all_namespaces)
+        self.course_key = CourseKey.from_string("course-v1:edX+DemoX+Demo_Course")
+        self.request_user = UserFactory.create(username="instructor", email="instructor@example.com")
+        self.learner = UserFactory.create(username="learner", email="learner@example.com")
+        self._set_national_id(self.learner, self.NATIONAL_ID)
+
+    def _set_national_id(self, user, national_id):
+        return self.extra_info_model.objects.create(user=user, arabic_name="x", national_id=national_id)
+
+    def _run(self, identifier, action="enroll", allow_national_id=True, email_students=True):
+        """Process one line with enroll_email/unenroll_email stubbed; returns (result, stub)."""
+        email = self.learner.email
+        before = EmailEnrollmentState(self.course_key, email)
+        before.user, before.enrollment, before.allowed = True, action == "unenroll", False
+        after = EmailEnrollmentState(self.course_key, email)
+        after.user, after.enrollment, after.allowed = True, action == "enroll", False
+        target = "enroll_email" if action == "enroll" else "unenroll_email"
+        returned = (before, after, None) if action == "enroll" else (before, after)
+        with patch(f"lms.djangoapps.instructor.utils.{target}", return_value=returned) as stub:
+            result = process_single_student_enrollment(
+                request_user=self.request_user,
+                course_key=self.course_key,
+                action=action,
+                identifier=identifier,
+                auto_enroll=False,
+                email_students=email_students,
+                reason="national id",
+                email_params={"course_name": "Test Course"},
+                allow_national_id=allow_national_id,
+            )
+        return result, stub
+
+    def _assert_nothing_happened(self, stub):
+        stub.assert_not_called()
+        self.assertEqual(ManualEnrollmentAudit.objects.count(), 0)  # noqa: PT009
+        self.assertEqual(CourseEnrollmentAllowed.objects.count(), 0)  # noqa: PT009
+        self.assertEqual(len(mail.outbox), 0)  # noqa: PT009
+
+    def test_enroll_resolves_to_the_account_and_notifies_its_own_email(self):
+        result, stub = self._run(self.NATIONAL_ID)
+
+        self.assertTrue(result["success"])  # noqa: PT009
+        self.assertEqual(result["identifier"], self.NATIONAL_ID)  # as typed  # noqa: PT009
+        self.assertEqual(result["resolved_email"], "learner@example.com")  # noqa: PT009
+        self.assertEqual(result["resolved_username"], "learner")  # noqa: PT009
+        args = stub.call_args[0]
+        self.assertEqual(args[1], "learner@example.com")  # the account's email, never the ID  # noqa: PT009
+        self.assertTrue(args[3])  # message_students: the notification goes to that account  # noqa: PT009
+        audit = ManualEnrollmentAudit.objects.get()
+        self.assertEqual(audit.enrolled_email, "learner@example.com")  # noqa: PT009
+        self.assertEqual(audit.state_transition, UNENROLLED_TO_ENROLLED)  # noqa: PT009
+
+    def test_unenroll_resolves_too(self):
+        result, stub = self._run(self.NATIONAL_ID, action="unenroll")
+
+        self.assertTrue(result["success"])  # noqa: PT009
+        self.assertEqual(result["resolved_email"], "learner@example.com")  # noqa: PT009
+        self.assertEqual(stub.call_args[0][1], "learner@example.com")  # noqa: PT009
+        self.assertEqual(ManualEnrollmentAudit.objects.get().state_transition, ENROLLED_TO_UNENROLLED)  # noqa: PT009
+
+    def test_arabic_indic_digits_are_normalised(self):
+        typed = "١٠١٢٣٤٥٦٧٨"
+
+        result, _stub = self._run(typed)
+
+        self.assertTrue(result["success"])  # noqa: PT009
+        self.assertEqual(result["identifier"], typed)  # noqa: PT009
+        self.assertEqual(result["resolved_email"], "learner@example.com")  # noqa: PT009
+
+    def test_an_id_stored_with_arabic_indic_digits_is_found_by_the_same_typed_form(self):
+        other = UserFactory.create(username="legacy", email="legacy@example.com")
+        self._set_national_id(other, "٢٠٢٣٤٥٦٧٨٩")
+
+        result, _stub = self._run("٢٠٢٣٤٥٦٧٨٩")
+
+        self.assertEqual(result["resolved_username"], "legacy")  # noqa: PT009
+
+    def test_unknown_id_fails_the_line_and_nothing_else_happens(self):
+        result, stub = self._run("2999999999")
+
+        self.assertFalse(result["success"])  # noqa: PT009
+        self.assertEqual(result["identifier"], "2999999999")  # noqa: PT009
+        self.assertEqual(result["error_type"], "national_id_not_found")  # noqa: PT009
+        self.assertEqual(result["error_message"], "No account found with this National ID")  # noqa: PT009
+        self._assert_nothing_happened(stub)
+
+    def test_unknown_id_also_fails_when_unenrolling(self):
+        result, stub = self._run("2999999999", action="unenroll")
+
+        self.assertEqual(result["error_type"], "national_id_not_found")  # noqa: PT009
+        self._assert_nothing_happened(stub)
+
+    def test_extra_info_without_a_user_is_not_an_account(self):
+        self.extra_info_model.objects.create(user=None, arabic_name="x", national_id="1000000001")
+
+        result, stub = self._run("1000000001")
+
+        self.assertEqual(result["error_type"], "national_id_not_found")  # noqa: PT009
+        self._assert_nothing_happened(stub)
+
+    def test_id_shaped_line_that_is_only_a_username_fails_and_enrolls_nobody(self):
+        """No account has this National ID, but one has it as its username: the line FAILS, it never falls through."""
+        UserFactory.create(username="1555555555", email="digits@example.com")
+
+        result, stub = self._run("1555555555")
+
+        self.assertFalse(result["success"])  # noqa: PT009
+        self.assertEqual(result["error_type"], "national_id_not_found")  # noqa: PT009
+        self.assertEqual(result["error_message"], "No account found with this National ID")  # noqa: PT009
+        self.assertNotIn("resolved_email", result)  # noqa: PT009
+        self._assert_nothing_happened(stub)
+
+    def test_id_shaped_username_still_works_for_the_stock_caller(self):
+        """Only the dashboard path (allow_national_id) is strict: a username of digits keeps working elsewhere."""
+        UserFactory.create(username="1555555555", email="digits@example.com")
+
+        result, _stub = self._run("1555555555", allow_national_id=False)
+
+        self.assertTrue(result["success"])  # noqa: PT009
+        self.assertNotIn("resolved_email", result)  # noqa: PT009
+
+    def test_username_and_id_of_the_same_account_is_not_ambiguous(self):
+        same = UserFactory.create(username="1666666666", email="same@example.com")
+        self._set_national_id(same, "1666666666")
+
+        result, _stub = self._run("1666666666")
+
+        self.assertTrue(result["success"])  # noqa: PT009
+        self.assertEqual(result["resolved_email"], "same@example.com")  # noqa: PT009
+
+    def test_username_of_one_account_and_id_of_another_is_ambiguous_and_enrolls_nobody(self):
+        UserFactory.create(username=self.NATIONAL_ID, email="namesake@example.com")
+
+        result, stub = self._run(self.NATIONAL_ID)
+
+        self.assertFalse(result["success"])  # noqa: PT009
+        self.assertEqual(result["error_type"], "national_id_ambiguous")  # noqa: PT009
+        self._assert_nothing_happened(stub)
+
+    def test_id_matching_two_rows_is_ambiguous(self):
+        other = UserFactory.create(username="other", email="other@example.com")
+        self._set_national_id(other, "١٠١٢٣٤٥٦٧٨")  # same ID stored un-normalised, a second account
+
+        result, stub = self._run("١٠١٢٣٤٥٦٧٨")  # typed form matches the second row; normalised form the first
+
+        self.assertEqual(result["error_type"], "national_id_ambiguous")  # noqa: PT009
+        self._assert_nothing_happened(stub)
+
+    def test_ids_are_ignored_unless_the_caller_allows_them(self):
+        """The bulk_enroll REST API and every other caller keep the stock contract: a bare number is just an email."""
+        result, stub = self._run(self.NATIONAL_ID, allow_national_id=False)
+
+        self.assertEqual(result["error_type"], "invalid_identifier")  # noqa: PT009
+        self.assertNotIn("resolved_email", result)  # noqa: PT009
+        stub.assert_not_called()
+
+    @ddt.data("learner@example.com", "learner", "123456789", "12345678901", "3012345678", "1O12345678")
+    def test_everything_that_is_not_an_id_takes_the_stock_path(self, identifier):
+        with patch.object(self.extra_info_model.objects, "filter") as lookup:
+            result, _stub = self._run(identifier)
+
+        lookup.assert_not_called()
+        self.assertNotIn("resolved_email", result)  # noqa: PT009
+
+    def test_without_the_national_id_app_an_id_falls_through_to_the_stock_lookup(self):
+        with patch("lms.djangoapps.instructor.utils.apps.get_model", side_effect=LookupError):
+            result, stub = self._run(self.NATIONAL_ID)
+
+        # stock behaviour: the digits are taken as an email address
+        self.assertEqual(result["error_type"], "invalid_identifier")  # noqa: PT009
+        stub.assert_not_called()
+
+    def test_a_failing_lookup_fails_that_line_only_and_does_not_log_the_id(self):
+        with patch("lms.djangoapps.instructor.utils._resolve_national_id", side_effect=RuntimeError("db down")):
+            with self.assertLogs("lms.djangoapps.instructor.utils", level="ERROR") as logs:
+                result, stub = self._run(self.NATIONAL_ID)
+
+        self.assertEqual(result["error_type"], "general_error")  # noqa: PT009
+        self.assertNotIn(self.NATIONAL_ID, "\n".join(logs.output))  # noqa: PT009
+        self._assert_nothing_happened(stub)
+
+    def test_general_error_logs_mask_an_id_shaped_identifier(self):
+        self.assertEqual(_mask_if_national_id(self.NATIONAL_ID), "******5678")  # noqa: PT009
+        self.assertEqual(_mask_if_national_id("١٠١٢٣٤٥٦٧٨"), "******5678")  # noqa: PT009
+        self.assertEqual(_mask_if_national_id("a@b.com"), "a@b.com")  # noqa: PT009
+
+    def test_batch_mixes_emails_usernames_ids_and_unknown_ids(self):
+        usernamed = UserFactory.create(username="byname", email="byname@example.com")
+
+        def fake_enroll(course_key, email, auto_enroll, message_students, params, language=None):
+            before = EmailEnrollmentState(course_key, email)
+            before.user, before.enrollment, before.allowed = True, False, False
+            after = EmailEnrollmentState(course_key, email)
+            after.user, after.enrollment, after.allowed = True, True, False
+            return before, after, None
+
+        with patch("lms.djangoapps.instructor.utils.enroll_email", side_effect=fake_enroll) as stub:
+            batch = process_student_enrollment_batch(
+                request_user=self.request_user,
+                course_key=self.course_key,
+                action="enroll",
+                identifiers=[self.NATIONAL_ID, "learner@example.com", usernamed.username, "2999999999"],
+                auto_enroll=False,
+                email_students=False,
+                reason="mixed",
+                secure=True,
+                allow_national_id=True,
+            )
+
+        self.assertEqual(batch["successful_operations"], 3)  # noqa: PT009
+        self.assertEqual(batch["failed_operations"], 1)  # noqa: PT009
+        by_identifier = {r["identifier"]: r for r in batch["results"]}
+        self.assertEqual(by_identifier[self.NATIONAL_ID]["resolved_email"], "learner@example.com")  # noqa: PT009
+        self.assertNotIn("resolved_email", by_identifier["learner@example.com"])  # noqa: PT009
+        self.assertEqual(by_identifier["2999999999"]["error_type"], "national_id_not_found")  # noqa: PT009
+        self.assertEqual(stub.call_count, 3)  # noqa: PT009

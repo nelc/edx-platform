@@ -736,7 +736,7 @@ such that the value can be defined later than this assignment (file load order).
         var describeResult = function(sr) {
             var text = sr.identifier;
             if (sr.resolved_email) {
-                text += ' \u2192 ' + sr.resolved_username + ' <' + sr.resolved_email + '>';
+                text += ' \u2192 ' + sr.resolved_username + ' (' + sr.resolved_email + ')';
             }
             if (sr.error_message && String(sr.error_type).indexOf('national_id') === 0) {
                 text += ' \u2014 ' + sr.error_message;

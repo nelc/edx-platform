@@ -269,6 +269,7 @@ class TestDuplicateNotificationSkipped(TestCase):
         ManualEnrollmentAudit.objects.filter(pk=audit.pk).update(time_stamp=timezone.now() - age)
 
     def _states(self, enrolled_before, enrolled_after):
+        """Build (before, after) EmailEnrollmentState pairs for a registered learner."""
         before = EmailEnrollmentState(self.course_key, self.user.email)
         before.user, before.enrollment, before.allowed = True, enrolled_before, False
         after = EmailEnrollmentState(self.course_key, self.user.email)
@@ -291,7 +292,8 @@ class TestDuplicateNotificationSkipped(TestCase):
                 reason="rerun",
                 email_params={"course_name": "Test Course"},
             )
-        # enroll_email(course, email, auto_enroll, message_students, params, ...) / unenroll_email(course, email, message_students, ...)
+        # enroll_email(course, email, auto_enroll, message_students, ...)
+        # unenroll_email(course, email, message_students, ...)
         message_students = mock_target.call_args[0][3 if action == "enroll" else 2]
         return result, message_students
 

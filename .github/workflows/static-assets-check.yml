@@ -68,6 +68,12 @@ jobs:
           key: ${{ runner.os }}-pip-${{ hashFiles('requirements/edx/development.txt') }}
           restore-keys: ${{ runner.os }}-pip-
 
+      # NELC: use the repo-pinned pip/setuptools (as the other workflows do). The runner's
+      # pip 26 builds sdists like loremipsum against setuptools>=82, which has no pkg_resources.
+      - name: Install pinned pip toolchain
+        run: |
+          pip install -r requirements/pip.txt
+
       - name: Install Limited Python Deps for Build
         run: |
           pip install -r requirements/edx/assets.txt

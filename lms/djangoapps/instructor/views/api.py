@@ -14,6 +14,7 @@ import logging
 import string
 import random
 import re
+import unicodedata
 
 import dateutil
 import pytz
@@ -3333,8 +3334,14 @@ def _split_input_list(str_list):
 
     `str_list` is a string coming from an input text area
     returns a list of separated values
+
+    NELC: invisible Unicode format characters (category Cf: RLM/LRM, ZWSP, ZWNJ/ZWJ, BOM, ALM, bidi embeddings and
+    isolates...) are removed first. Python's `\\s` does not match them, so lists pasted from Arabic Excel/Word turned
+    a token made only of them into a blank "invalid identifier", and a real email carrying one into an invalid one.
+    They never belong in an email, username or national ID, so stripping is correct for every caller.
     """
 
+    str_list = ''.join(ch for ch in str_list if unicodedata.category(ch) != 'Cf')  # NELC
     new_list = re.split(r'[\n\r\s,]', str_list)
     new_list = [s.strip() for s in new_list]
     new_list = [s for s in new_list if s != '']

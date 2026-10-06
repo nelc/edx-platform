@@ -4406,6 +4406,7 @@ class TestInstructorEmailContentList(SharedModuleStoreTestCase, LoginEnrollmentT
         self.assertDictEqual(expected_info, returned_info)
 
 
+@ddt.ddt
 class TestInstructorAPIHelpers(TestCase):
     """ Test helpers for instructor.api """
 
@@ -4426,6 +4427,26 @@ class TestInstructorAPIHelpers(TestCase):
         assert _split_input_list('robot@robot.edu, robot2@robot.edu') == ['robot@robot.edu', 'robot2@robot.edu']
         scary_unistuff = chr(40960) + 'abcd' + chr(1972)
         assert _split_input_list(scary_unistuff) == [scary_unistuff]
+
+    @ddt.data(
+        '\u200f', '\u200e', '\u200b', '\u200c', '\u200d', '\u2060', '\ufeff', '\u061c',
+        '\u202a\u202b\u202c\u202d\u202e', '\u2066\u2067\u2068\u2069',
+    )
+    def test_split_input_list_drops_tokens_made_only_of_invisible_chars(self, invisible):
+        """NELC: a token of only format characters (Cf) must vanish instead of becoming a blank identifier."""
+        assert _split_input_list(f'a@b.sa,{invisible},{invisible} {invisible}\n{invisible}') == ['a@b.sa']
+        assert _split_input_list(invisible) == []
+
+    @ddt.data('\u200f', '\u200e', '\u200b', '\ufeff', '\u061c', '\u202e')
+    def test_split_input_list_strips_invisible_chars_attached_to_identifier(self, invisible):
+        """NELC: an email/username/national ID carrying an attached format character resolves to the clean value."""
+        raw = f'{invisible}user@example.com{invisible}, name{invisible}1\n{invisible}1234567890'
+        assert _split_input_list(raw) == ['user@example.com', 'name1', '1234567890']
+
+    def test_split_input_list_arabic_mixed(self):
+        """NELC: Arabic letters are kept (not Cf); only the invisible marks around them go."""
+        raw = '\ufeffمحمد\u200f@example.com,\u200f\u200e,\u200fعلي_1 \u200b'
+        assert _split_input_list(raw) == ['محمد@example.com', 'علي_1']
 
     def test_msk_from_problem_urlname(self):
         course_id = CourseKey.from_string('MITx/6.002x/2013_Spring')

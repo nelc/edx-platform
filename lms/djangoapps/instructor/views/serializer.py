@@ -1,5 +1,6 @@
 """ Instructor apis serializers. """
 import re
+import unicodedata
 
 from django.contrib.auth.models import User  # lint-amnesty, pylint: disable=imported-auth-user
 from django.core.exceptions import ValidationError
@@ -321,7 +322,10 @@ def _split_input_list(str_list):
 
     `str_list` is a string coming from an input text area
     returns a list of separated values
+
+    NELC: strips invisible Unicode format characters (category Cf) first - see api._split_input_list.
     """
+    str_list = ''.join(ch for ch in str_list if unicodedata.category(ch) != 'Cf')  # NELC
     new_list = re.split(r'[,\s\n\r]+', str_list)
     new_list = [s.strip() for s in new_list]
     new_list = [s for s in new_list if s != '']

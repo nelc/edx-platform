@@ -109,3 +109,20 @@ def plugin_settings(settings):
         # .. toggle_tickets: https://github.com/openedx/edx-platform/pull/15392
         'BATCH_ENROLLMENT_NOTIFY_USERS_DEFAULT': True,
     })
+
+    # NELC: limits for the instructor dashboard batch enrollment (StudentsUpdateEnrollmentView).
+    # All are plain Django settings, overridable per environment (LMS_CFG / Tutor `lms` settings patch).
+    #
+    # Largest batch still processed inside the web request (synchronously) when "Notify users by email" is
+    # ticked. Notification mail costs ~2 s per learner, and Cloudflare cuts a request at 125 s, so keep this low.
+    # A bigger batch is switched to background (async) processing automatically.
+    settings.BATCH_ENROLLMENT_SYNC_MAX_NOTIFY = 30
+    # Same, when no email is sent (DB work only, far cheaper per learner).
+    settings.BATCH_ENROLLMENT_SYNC_MAX = 100
+    # Seconds a synchronous batch holds its duplicate-submission lock (cache key). Must be >= the longest
+    # realistic synchronous run; the lock is released as soon as the request finishes.
+    settings.BATCH_ENROLLMENT_LOCK_TIMEOUT_SECONDS = 900
+    # A learner who already has a ManualEnrollmentAudit row for the same course with the same resulting
+    # enrollment state within this many seconds is not notified again (0 disables the check). The
+    # enrollment itself is always processed (it is idempotent); only the repeat email is skipped.
+    settings.BATCH_ENROLLMENT_EMAIL_DEDUPE_SECONDS = 900

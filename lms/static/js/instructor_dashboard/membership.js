@@ -629,6 +629,8 @@ such that the value can be defined later than this assignment (file load order).
                     async_processing: batchEnroll.$checkbox_asyncprocessing.is(':checked'),
                     reason: batchEnroll.$reason_field.val()
                 };
+                // NELC: block double submits. A slow request that is clicked again runs the whole batch twice.
+                batchEnroll.$enrollment_button.prop('disabled', true);
                 return $.ajax({
                     dataType: 'json',
                     type: 'POST',
@@ -637,9 +639,16 @@ such that the value can be defined later than this assignment (file load order).
                     success: function(data) {
                         return batchEnroll.display_response(data);
                     },
-                    error: statusAjaxError(function() {
-                        return batchEnroll.fail_with_error(gettext('Error enrolling/unenrolling users.'));
-                    })
+                    error: statusAjaxError(function(jqXHR) {
+                        // NELC: the server explains 400/409 refusals in {"error": "..."}; show that text.
+                        var serverError = jqXHR && jqXHR.responseJSON && jqXHR.responseJSON.error;
+                        return batchEnroll.fail_with_error(
+                            serverError || gettext('Error enrolling/unenrolling users.')
+                        );
+                    }),
+                    complete: function() {
+                        batchEnroll.$enrollment_button.prop('disabled', false);
+                    }
                 });
             });
         }
@@ -689,9 +698,35 @@ such that the value can be defined later than this assignment (file load order).
                 true
             );
 
+            const $messages = $('<ul/>');
+            // NELC: the server moved a large batch to background processing; tell the instructor why.
+            if (dataFromServer.auto_switched_to_async) {
+                $messages.append($('<li/>', {
+                    text: interpolate(
+                        gettext(
+                            'This batch of %(count)s learners is above the limit of %(limit)s for immediate ' +
+                            'processing, so it was switched to background processing automatically. ' +
+                            'The results report (CSV) and a completion email will arrive when it finishes.'
+                        ),
+                        { count: dataFromServer.total_students, limit: dataFromServer.sync_limit },
+                        true
+                    )
+                }));
+            }
+            if (dataFromServer.task_ids && dataFromServer.task_ids.length > 1) {
+                $messages.append($('<li/>', {
+                    text: interpolate(
+                        gettext('The batch was split into %(tasks)s background tasks because it is large.'),
+                        { tasks: dataFromServer.task_ids.length },
+                        true
+                    )
+                }));
+            }
+            $messages.append($('<li/>', { text: message }));
+
             const $taskResSection = $('<div/>', { class: 'request-res-section' })
                 .append($('<h3/>', { text: title }))
-                .append($('<ul/>').append($('<li/>', { text: message })));
+                .append($messages);
 
             return this.$task_response.append($taskResSection);
         };

@@ -12,7 +12,13 @@ from django.test import SimpleTestCase, TestCase, override_settings
 from opaque_keys.edx.locator import CourseLocator
 
 from common.test.utils import MockS3Boto3Mixin
-from lms.djangoapps.instructor_task.models import TASK_INPUT_LENGTH, InstructorTask, ReportStore
+from common.djangoapps.student.tests.factories import UserFactory
+from lms.djangoapps.instructor_task.models import (
+    TASK_INPUT_LENGTH,
+    InstructorTask,
+    ReportStore,
+    TaskInputTooLongError,
+)
 from lms.djangoapps.instructor_task.tests.test_base import TestReportMixin
 
 
@@ -33,6 +39,42 @@ class TestInstructorTasksModel(TestCase):
                 task_input=task_input,
                 requester='dummy requester',
             )
+
+    def test_task_input_limit_fits_the_text_column(self):
+        """
+        NELC: task_input is a MySQL TEXT column (65,535 bytes) and the JSON is ASCII-escaped, so the limit
+        must stay below it.
+        """
+        assert TASK_INPUT_LENGTH == 60000
+        assert TASK_INPUT_LENGTH < 65535
+
+    def test_task_input_too_long_raises_specific_error(self):
+        """
+        NELC: the over-limit error is TaskInputTooLongError (still an AttributeError for old callers).
+        """
+        with pytest.raises(TaskInputTooLongError):
+            InstructorTask.create(
+                course_id='dummy_course_id',
+                task_type='dummy type',
+                task_key='dummy key',
+                task_input='s' * TASK_INPUT_LENGTH,
+                requester='dummy requester',
+            )
+
+    def test_task_input_at_the_limit_is_stored_whole(self):
+        """
+        NELC: an input of exactly TASK_INPUT_LENGTH JSON characters is accepted and stored untruncated.
+        """
+        task_input = 's' * (TASK_INPUT_LENGTH - 2)  # json.dumps adds the two quotes
+        task = InstructorTask.create(
+            course_id=CourseLocator(org="testx", course="coursex", run="runx"),
+            task_type='dummy type',
+            task_key='dummy key',
+            task_input=task_input,
+            requester=UserFactory(),
+        )
+        assert len(task.task_input) == TASK_INPUT_LENGTH
+        assert InstructorTask.objects.get(pk=task.pk).task_input == task.task_input
 
 
 class ReportStoreTestMixin:

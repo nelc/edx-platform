@@ -5,11 +5,14 @@ Tests for student enrollment utility functions that can be used
 in both synchronous and asynchronous contexts.
 """
 
+from datetime import timedelta
 from unittest.mock import Mock, patch
 
 import ddt
 from django.core.exceptions import ValidationError
-from django.test import TestCase
+from django.test import TestCase, override_settings
+from django.utils import timezone
+from edx_django_utils.cache import RequestCache
 from opaque_keys.edx.keys import CourseKey
 
 from common.djangoapps.student.models import (
@@ -21,7 +24,9 @@ from common.djangoapps.student.models import (
     UNENROLLED_TO_ALLOWEDTOENROLL,
     UNENROLLED_TO_ENROLLED,
     UNENROLLED_TO_UNENROLLED,
+    CourseEnrollment,
     EnrollStatusChange,
+    ManualEnrollmentAudit,
 )
 from common.djangoapps.student.tests.factories import UserFactory
 from lms.djangoapps.instructor.enrollment import EmailEnrollmentState
@@ -235,6 +240,137 @@ class TestProcessSingleStudentEnrollment(TestCase):
             result["error_message"],
             "Something went wrong while processing this learner. Please try again or contact support.",
         )
+
+
+class TestDuplicateNotificationSkipped(TestCase):
+    """
+    NELC: a learner who was just processed for the same change is not mailed a second time
+    (an instructor re-submitting a batch), while the enrollment itself still runs.
+    """
+
+    def setUp(self):
+        super().setUp()
+        self.course_key = CourseKey.from_string("course-v1:edX+DemoX+Demo_Course")
+        self.other_course_key = CourseKey.from_string("course-v1:edX+Other+Run")
+        # CourseEnrollment.get_enrollment memoises in a RequestCache that outlives the test's rolled-back rows;
+        # without this, a later test that reuses the same user id and course key reads a stale enrollment.
+        self.addCleanup(RequestCache.clear_all_namespaces)
+        self.user = UserFactory.create(username="testuser", email="test@example.com")
+        self.request_user = UserFactory.create(username="instructor", email="instructor@example.com")
+
+    def _audit(self, transition, course_key=None, age=timedelta(seconds=30)):
+        """Create a ManualEnrollmentAudit row for self.user, `age` old."""
+        enrollment, _created = CourseEnrollment.objects.get_or_create(
+            user=self.user, course_id=course_key or self.course_key, defaults={"mode": "audit"}
+        )
+        audit = ManualEnrollmentAudit.create_manual_enrollment_audit(
+            self.request_user, self.user.email, transition, "earlier run", enrollment
+        )
+        ManualEnrollmentAudit.objects.filter(pk=audit.pk).update(time_stamp=timezone.now() - age)
+
+    def _states(self, enrolled_before, enrolled_after):
+        before = EmailEnrollmentState(self.course_key, self.user.email)
+        before.user, before.enrollment, before.allowed = True, enrolled_before, False
+        after = EmailEnrollmentState(self.course_key, self.user.email)
+        after.user, after.enrollment, after.allowed = True, enrolled_after, False
+        return before, after
+
+    def _run(self, action, email_students=True):
+        """Run one learner through process_single_student_enrollment; return (result, message_students flag)."""
+        before, after = self._states(*((True, True) if action == "enroll" else (True, False)))
+        target = "enroll_email" if action == "enroll" else "unenroll_email"
+        returned = (before, after, None) if action == "enroll" else (before, after)
+        with patch(f"lms.djangoapps.instructor.utils.{target}", return_value=returned) as mock_target:
+            result = process_single_student_enrollment(
+                request_user=self.request_user,
+                course_key=self.course_key,
+                action=action,
+                identifier=self.user.email,
+                auto_enroll=False,
+                email_students=email_students,
+                reason="rerun",
+                email_params={"course_name": "Test Course"},
+            )
+        # enroll_email(course, email, auto_enroll, message_students, params, ...) / unenroll_email(course, email, message_students, ...)
+        message_students = mock_target.call_args[0][3 if action == "enroll" else 2]
+        return result, message_students
+
+    def test_enroll_email_skipped_after_recent_enroll(self):
+        self._audit(UNENROLLED_TO_ENROLLED)
+
+        result, message_students = self._run("enroll")
+
+        self.assertTrue(result["success"])  # noqa: PT009
+        self.assertTrue(result["email_skipped"])  # noqa: PT009
+        self.assertFalse(message_students)  # noqa: PT009
+        # the enrollment is still processed and audited
+        self.assertEqual(ManualEnrollmentAudit.objects.filter(enrolled_email=self.user.email).count(), 2)  # noqa: PT009
+
+    def test_unenroll_email_skipped_after_recent_unenroll(self):
+        self._audit(ENROLLED_TO_UNENROLLED)
+
+        result, message_students = self._run("unenroll")
+
+        self.assertTrue(result["email_skipped"])  # noqa: PT009
+        self.assertFalse(message_students)  # noqa: PT009
+
+    def test_email_sent_when_nothing_recent(self):
+        result, message_students = self._run("enroll")
+
+        self.assertNotIn("email_skipped", result)  # noqa: PT009
+        self.assertTrue(message_students)  # noqa: PT009
+
+    def test_email_sent_when_audit_row_is_older_than_the_window(self):
+        self._audit(UNENROLLED_TO_ENROLLED, age=timedelta(seconds=901))
+
+        result, message_students = self._run("enroll")
+
+        self.assertNotIn("email_skipped", result)  # noqa: PT009
+        self.assertTrue(message_students)  # noqa: PT009
+
+    @override_settings(BATCH_ENROLLMENT_EMAIL_DEDUPE_SECONDS=60)
+    def test_window_is_settings_driven(self):
+        self._audit(UNENROLLED_TO_ENROLLED, age=timedelta(seconds=61))
+
+        result, message_students = self._run("enroll")
+
+        self.assertNotIn("email_skipped", result)  # noqa: PT009
+        self.assertTrue(message_students)  # noqa: PT009
+
+    @override_settings(BATCH_ENROLLMENT_EMAIL_DEDUPE_SECONDS=0)
+    def test_window_zero_disables_the_check(self):
+        self._audit(UNENROLLED_TO_ENROLLED)
+
+        result, message_students = self._run("enroll")
+
+        self.assertNotIn("email_skipped", result)  # noqa: PT009
+        self.assertTrue(message_students)  # noqa: PT009
+
+    def test_email_sent_for_a_different_course(self):
+        self._audit(UNENROLLED_TO_ENROLLED, course_key=self.other_course_key)
+
+        result, message_students = self._run("enroll")
+
+        self.assertNotIn("email_skipped", result)  # noqa: PT009
+        self.assertTrue(message_students)  # noqa: PT009
+
+    def test_enroll_after_unenroll_is_notified(self):
+        """Only the LATEST audit row counts: enroll -> unenroll -> enroll must mail the second enroll."""
+        self._audit(UNENROLLED_TO_ENROLLED, age=timedelta(seconds=120))
+        self._audit(ENROLLED_TO_UNENROLLED, age=timedelta(seconds=60))
+
+        result, message_students = self._run("enroll")
+
+        self.assertNotIn("email_skipped", result)  # noqa: PT009
+        self.assertTrue(message_students)  # noqa: PT009
+
+    def test_no_check_and_no_flag_when_email_not_requested(self):
+        self._audit(UNENROLLED_TO_ENROLLED)
+
+        result, message_students = self._run("enroll", email_students=False)
+
+        self.assertNotIn("email_skipped", result)  # noqa: PT009
+        self.assertFalse(message_students)  # noqa: PT009
 
 
 class TestProcessStudentEnrollmentBatch(TestCase):

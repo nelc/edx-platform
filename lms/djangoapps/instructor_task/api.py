@@ -598,12 +598,14 @@ def process_scheduled_instructor_tasks():
             log.error(f"Error processing scheduled task with task id '{schedule.task.id}': {exc}")
 
 
-def _student_enrollment_task_input(action, identifiers, auto_enroll, email_students, reason, secure, site_id):
+def _student_enrollment_task_input(
+    action, identifiers, auto_enroll, email_students, reason, secure, site_id, allow_national_id=False
+):
     """
     NELC: the `task_input` dict of a STUDENT_ENROLLMENT_BATCH task (extracted so the size of an input can be
     computed by split_enrollment_identifiers with exactly the same shape that submit_student_enrollment_batch stores).
     """
-    return {
+    task_input = {
         "action": action,
         "identifiers": identifiers,
         "auto_enroll": auto_enroll,
@@ -612,6 +614,9 @@ def _student_enrollment_task_input(action, identifiers, auto_enroll, email_stude
         "secure": secure,
         "site_id": site_id,
     }
+    if allow_national_id:  # NELC: present only when set, so every other task_input keeps its exact shape
+        task_input["allow_national_id"] = True
+    return task_input
 
 
 def split_enrollment_identifiers(
@@ -622,6 +627,7 @@ def split_enrollment_identifiers(
     reason: str | None,
     secure: bool,
     site_id: int | None = None,
+    allow_national_id: bool = False,
 ) -> list[list[str]]:
     """
     NELC: split `identifiers` into the fewest ordered chunks whose JSON `task_input` each fits in
@@ -635,7 +641,7 @@ def split_enrollment_identifiers(
     """
     def size_of(ids):
         return len(json.dumps(_student_enrollment_task_input(
-            action, ids, auto_enroll, email_students, reason, secure, site_id
+            action, ids, auto_enroll, email_students, reason, secure, site_id, allow_national_id
         )))
 
     base = size_of([])  # includes the "[]" of the empty identifier list
@@ -674,6 +680,7 @@ def submit_student_enrollment_batch(
     reason: str | None,
     secure: bool,
     site_id: int | None = None,
+    allow_national_id: bool = False,
 ):
     """
     Request to have student enrollment operations processed as a background task.
@@ -691,6 +698,7 @@ def submit_student_enrollment_batch(
         reason (str | None): Optional reason for enrollment change
         secure (bool): Whether the request is secure (HTTPS)
         site_id (int | None): Optional site ID for notification emails
+        allow_national_id (bool): NELC. Accept National IDs of existing accounts as identifiers
 
     Returns:
         InstructorTask object representing the submitted background task
@@ -702,7 +710,7 @@ def submit_student_enrollment_batch(
     task_class = student_enrollment_batch
 
     task_input = _student_enrollment_task_input(
-        action, identifiers, auto_enroll, email_students, reason, secure, site_id
+        action, identifiers, auto_enroll, email_students, reason, secure, site_id, allow_national_id
     )
 
     task_key_stub = f"{course_key}_{action}_{json.dumps(sorted(identifiers))}"

@@ -113,6 +113,7 @@ def process_student_enrollment_batch(
             - reason: optional reason for enrollment change
             - secure: boolean indicating if request was secure (HTTPS)
             - site_id: optional site ID for notification emails
+            - allow_national_id: NELC. optional, accept National IDs of existing accounts as identifiers
         action_name: Name of the action being performed
 
     Returns:
@@ -156,6 +157,7 @@ def process_student_enrollment_batch(
         reason=task_input.get("reason"),
         secure=task_input.get("secure", False),
         progress_callback=progress_callback,
+        allow_national_id=task_input.get("allow_national_id", False),  # NELC
     )
 
     task_progress.attempted = batch_result["total_students"]
@@ -170,8 +172,15 @@ def process_student_enrollment_batch(
         "failed": batch_result["failed_operations"],
     }
 
-    CSV_FIELDS = ["identifier", "success", "state_transition", "error_type", "error_message"]
-    CSV_DEFAULTS = {"identifier": "", "success": False, "state_transition": "", "error_type": "", "error_message": ""}
+    # NELC: resolved_* say which account a typed National ID matched.
+    CSV_FIELDS = [
+        "identifier", "success", "state_transition", "error_type", "error_message",
+        "resolved_email", "resolved_username",
+    ]
+    CSV_DEFAULTS = {
+        "identifier": "", "success": False, "state_transition": "", "error_type": "", "error_message": "",
+        "resolved_email": "", "resolved_username": "",
+    }
 
     def extract_csv_row(result: dict) -> list[str]:
         """Extract CSV row data from result dictionary."""

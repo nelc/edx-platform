@@ -6,9 +6,11 @@ that can be used in both synchronous and asynchronous contexts.
 """
 
 import logging
+import re
 from collections.abc import Callable
 from datetime import timedelta
 
+from django.apps import apps
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
@@ -125,7 +127,74 @@ def _was_recently_processed(course_key: CourseKey, email: str, action: str) -> b
     )
 
 
-def process_single_student_enrollment(
+# NELC: National ID as a batch-enrollment identifier (instructor dashboard only; see _resolve_national_id).
+# The shape and the Arabic-Indic digit normalisation mirror eox_nelp.utils.NATIONAL_ID_REGEX / normalize_national_id
+# and custom_reg_form's ExtraInfoForm; core must not import either, so the two rules are restated here.
+_NATIONAL_ID_PATTERN = re.compile(r"[12][0-9]{9}")
+_ARABIC_INDIC_DIGITS = str.maketrans("٠١٢٣٤٥٦٧٨٩", "0123456789")
+NATIONAL_ID_NOT_FOUND = "national_id_not_found"
+NATIONAL_ID_AMBIGUOUS = "national_id_ambiguous"
+
+
+class NationalIdLookupError(Exception):
+    """NELC: an ID-shaped identifier that must not be enrolled: no account has it, or it points at two accounts."""
+
+    def __init__(self, error_type: str, message: str):
+        super().__init__(message)
+        self.error_type = error_type
+        self.message = message
+
+
+def _mask_if_national_id(identifier: str) -> str:
+    """NELC: identifiers are logged, so an ID-shaped one is reduced to its last four digits."""
+    normalized = identifier.strip().translate(_ARABIC_INDIC_DIGITS)
+    return f"******{normalized[-4:]}" if _NATIONAL_ID_PATTERN.fullmatch(normalized) else identifier
+
+
+def _resolve_national_id(identifier: str):
+    """
+    NELC: resolve an ID-shaped `identifier` to an EXISTING account through custom_reg_form.ExtraInfo.national_id.
+
+    Returns None when the stock lookup should run unchanged: the identifier is not ID-shaped, or the app that
+    stores National IDs is not installed. Otherwise returns the matching user or raises NationalIdLookupError.
+    Nothing is ever created and no invite is ever made; an unknown ID is an error, not an email.
+
+    An ID-shaped line is only ever a National ID. It is NOT looked up as a username when no account has that ID
+    (a typo in an ID must not enrol whoever happens to own that number as a username):
+      * exactly one account has the National ID -> that account
+      * no account has the National ID          -> not found (even if a username equals the digits)
+      * several rows/accounts have the ID, or the digits are ALSO the username of a different account -> ambiguous
+    """
+    normalized = identifier.strip().translate(_ARABIC_INDIC_DIGITS)
+    if not _NATIONAL_ID_PATTERN.fullmatch(normalized):
+        return None
+    try:
+        extra_info_model = apps.get_model("custom_reg_form", "ExtraInfo")
+    except LookupError:
+        return None
+
+    # The as-typed form is matched too: some stored IDs were saved before normalisation and kept Arabic-Indic digits.
+    rows = extra_info_model.objects.filter(
+        national_id__in={normalized, identifier}, user__isnull=False
+    ).select_related("user")
+    id_users = {row.user_id: row.user for row in rows}
+    if not id_users:
+        raise NationalIdLookupError(NATIONAL_ID_NOT_FOUND, _("No account found with this National ID"))
+    try:
+        username_user = get_user_by_username_or_email(identifier)
+    except User.DoesNotExist:
+        username_user = None
+
+    if len(id_users) > 1 or (username_user and username_user.pk not in id_users):
+        raise NationalIdLookupError(
+            NATIONAL_ID_AMBIGUOUS,
+            _("This number matches more than one account (a National ID or a username). "
+              "Enter the learner's email address or username instead."),
+        )
+    return next(iter(id_users.values()))
+
+
+def process_single_student_enrollment(  # pylint: disable=too-many-statements  # NELC: National ID branch
     request_user: User,
     course_key: CourseKey,
     action: str,
@@ -134,6 +203,7 @@ def process_single_student_enrollment(
     email_students: bool,
     reason: str | None,
     email_params: dict | None,
+    allow_national_id: bool = False,
 ):
     """
     Process enrollment/unenrollment for a single student.
@@ -147,6 +217,8 @@ def process_single_student_enrollment(
         email_students (bool): Whether to send enrollment emails
         reason (str | None): Optional reason for enrollment change
         email_params (dict | None): Pre-computed email parameters (optional)
+        allow_national_id (bool): NELC. Accept a National ID as the identifier of an EXISTING account. Set only by the
+            instructor-dashboard request path.
 
     Returns:
         dict: Result of the enrollment operation with keys:
@@ -162,9 +234,34 @@ def process_single_student_enrollment(
     identified_user = None
     email = None
     language = None
+    national_id_match = None
+
+    if allow_national_id:  # NELC
+        try:
+            national_id_match = _resolve_national_id(identifier)
+        except NationalIdLookupError as exc:
+            return {
+                "identifier": identifier,
+                "error": True,
+                "success": False,
+                "error_type": exc.error_type,
+                "error_message": exc.message,
+            }
+        except Exception as exc:  # pylint: disable=broad-exception-caught
+            log.exception("Error while looking up a National ID for batch enrollment: %s", type(exc).__name__)
+            return {
+                "identifier": identifier,
+                "error": True,
+                "success": False,
+                "error_type": "general_error",
+                "error_message": _("Something went wrong while looking up this National ID. Please try again."),
+            }
 
     try:
-        identified_user = get_user_by_username_or_email(identifier)
+        if national_id_match:  # NELC
+            identified_user = national_id_match
+        else:
+            identified_user = get_user_by_username_or_email(identifier)
     except User.DoesNotExist:
         email = identifier
     else:
@@ -216,6 +313,11 @@ def process_single_student_enrollment(
         }
         if email_skipped:
             result["email_skipped"] = True  # NELC
+        if national_id_match:  # NELC: lets the team match each typed line to the account it resolved to
+            result.update(
+                resolved_email=identified_user.email,
+                resolved_username=identified_user.username,
+            )
         return result
     except ValidationError:
         return {
@@ -226,7 +328,7 @@ def process_single_student_enrollment(
             "error_message": _("Invalid email address"),
         }
     except Exception as exc:  # pylint: disable=broad-exception-caught
-        log.exception("Error while processing student %s: %s", identifier, exc)
+        log.exception("Error while processing student %s: %s", _mask_if_national_id(identifier), exc)  # NELC
         return {
             "identifier": identifier,
             "error": True,
@@ -248,6 +350,7 @@ def process_student_enrollment_batch(
     reason: str | None,
     secure: bool,
     progress_callback: Callable[..., None] | None = None,
+    allow_national_id: bool = False,
 ):
     """
     Process a batch of student enrollment/unenrollment operations.
@@ -263,6 +366,7 @@ def process_student_enrollment_batch(
         secure (bool): Whether the request is secure (HTTPS)
         progress_callback (Optional[Callable]): Optional callback function to report progress
             Should accept (current, total, results) parameters
+        allow_national_id (bool): NELC. Accept National IDs (of existing accounts) among the identifiers
 
     Returns:
         dict: Batch processing results with keys:
@@ -293,6 +397,7 @@ def process_student_enrollment_batch(
             email_students=email_students,
             reason=reason,
             email_params=email_params,
+            allow_national_id=allow_national_id,  # NELC
         )
 
         results.append(result)

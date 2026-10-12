@@ -56,6 +56,7 @@ from cms.djangoapps.contentstore.utils import (
     reverse_url,
 )
 from cms.djangoapps.contentstore.views.component import ADVANCED_COMPONENT_TYPES
+from cms.djangoapps.contentstore.views.course import create_new_course_in_store
 from common.djangoapps.course_action_state.managers import CourseActionStateItemNotFoundError
 from common.djangoapps.course_action_state.models import CourseRerunState, CourseRerunUIStateManager
 from common.djangoapps.student import auth
@@ -1131,6 +1132,30 @@ class ContentStoreTest(ContentStoreTestCase):
         course_block = self.store.get_course(course_id)
         self.assertEqual(course_block.language, 'hr')
 
+    @override_settings(NEW_COURSE_CATALOG_VISIBILITY='none')
+    def test_create_course_catalog_visibility(self):
+        """A new course gets the configured catalog visibility on both the draft and published branches"""
+        course_id = _get_course_id(self.store, self.assert_created_course())
+        for branch in (ModuleStoreEnum.Branch.draft_preferred, ModuleStoreEnum.Branch.published_only):
+            self.assertEqual(_explicit_catalog_visibility(self.store, course_id, branch), 'none')
+
+    def test_create_course_catalog_visibility_unset(self):
+        """Without the setting, a new course never sets catalog_visibility and keeps the course default"""
+        course_id = _get_course_id(self.store, self.assert_created_course())
+        for branch in (ModuleStoreEnum.Branch.draft_preferred, ModuleStoreEnum.Branch.published_only):
+            self.assertIsNone(_explicit_catalog_visibility(self.store, course_id, branch))
+        self.assertEqual(self.store.get_course(course_id).catalog_visibility, 'both')
+
+    @override_settings(NEW_COURSE_CATALOG_VISIBILITY='none')
+    def test_create_course_catalog_visibility_caller_wins(self):
+        """A catalog_visibility passed by the caller is not replaced by the configured one"""
+        course = create_new_course_in_store(
+            ModuleStoreEnum.Type.split, self.user, 'MITx', '112', '2013_Spring', {'catalog_visibility': 'about'}
+        )
+        self.assertEqual(
+            _explicit_catalog_visibility(self.store, course.id, ModuleStoreEnum.Branch.published_only), 'about'
+        )
+
     def test_create_course_with_dots(self):
         """Test new course creation with dots in the name"""
         self.course_data['org'] = 'org.foo.bar'
@@ -1982,6 +2007,43 @@ class RerunCourseTest(ContentStoreTestCase):
 
         self.assertEqual(None, destination_course.advertised_start)
 
+    @override_settings(NEW_COURSE_CATALOG_VISIBILITY='none')
+    def test_rerun_course_catalog_visibility(self):
+        """A rerun gets the configured catalog visibility on both branches, and its source course is untouched"""
+        source_course = CourseFactory.create(catalog_visibility='both', default_store=ModuleStoreEnum.Type.split)
+        destination_course_key = self.post_rerun_request(source_course.id)
+        for branch in (ModuleStoreEnum.Branch.draft_preferred, ModuleStoreEnum.Branch.published_only):
+            self.assertEqual(_explicit_catalog_visibility(self.store, destination_course_key, branch), 'none')
+            self.assertEqual(_explicit_catalog_visibility(self.store, source_course.id, branch), 'both')
+
+    def test_rerun_course_catalog_visibility_unset(self):
+        """Without the setting a rerun is as before: its published branch is the source's until the first publish"""
+        source_course = CourseFactory.create(
+            catalog_visibility='about', display_name='Source', default_store=ModuleStoreEnum.Type.split
+        )
+        destination_course_key = self.post_rerun_request(source_course.id)
+        for branch in (ModuleStoreEnum.Branch.draft_preferred, ModuleStoreEnum.Branch.published_only):
+            self.assertEqual(_explicit_catalog_visibility(self.store, destination_course_key, branch), 'about')
+            self.assertEqual(_explicit_catalog_visibility(self.store, source_course.id, branch), 'about')
+        with self.store.branch_setting(ModuleStoreEnum.Branch.published_only, destination_course_key):
+            self.assertEqual(self.store.get_course(destination_course_key).display_name, 'Source')
+        self.assertEqual(self.store.get_course(destination_course_key).display_name, 'Robot Super Course')
+
+    @override_settings(NEW_COURSE_CATALOG_VISIBILITY='none')
+    def test_rerun_course_catalog_visibility_error(self):
+        """A failure while publishing the catalog visibility fails the rerun like any other rerun error"""
+        error_message = "Mock Error Message"
+        source_course = CourseFactory.create(default_store=ModuleStoreEnum.Type.split)
+        with mock.patch(
+                'xmodule.modulestore.mixed.MixedModuleStore.update_item',
+                mock.Mock(side_effect=Exception(error_message))
+        ):
+            destination_course_key = self.post_rerun_request(source_course.id)
+        rerun_state = CourseRerunState.objects.find_first(course_key=destination_course_key)
+        self.assertEqual(rerun_state.state, CourseRerunUIStateManager.State.FAILED)
+        self.assertIn(error_message, rerun_state.message)
+        self.assertIsNone(self.store.get_course(destination_course_key))
+
     def test_rerun_of_rerun(self):
         source_course = CourseFactory.create(default_store=ModuleStoreEnum.Type.split)
         rerun_course_key = self.post_rerun_request(source_course.id)
@@ -2207,3 +2269,10 @@ def _create_course(test, course_key, course_data):
 def _get_course_id(store, course_data):
     """Returns the course ID."""
     return store.make_course_key(course_data['org'], course_data['number'], course_data['run'])
+
+
+def _explicit_catalog_visibility(store, course_key, branch):
+    """Returns the catalog_visibility the course explicitly set on the given branch, or None if it never set one."""
+    with store.branch_setting(branch, course_key):
+        course = store.get_course(course_key)
+    return course.catalog_visibility if course.fields['catalog_visibility'].is_set_on(course) else None

@@ -2032,6 +2032,16 @@ ENTRANCE_EXAM_MIN_SCORE_PCT = 50
 ### Default language for a new course
 DEFAULT_COURSE_LANGUAGE = "en"
 
+# .. setting_name: NEW_COURSE_CATALOG_VISIBILITY
+# .. setting_default: None
+# .. setting_description: The catalog visibility ('both', 'about' or 'none') given to every new course created
+#     through create_new_course_in_store, unless the caller passes one, and to every course rerun. A catalog
+#     visibility that a course has explicitly set also survives a course import. None leaves all of this untouched.
+# .. setting_warning: The value is written as is and is not validated, it must be a valid catalog_visibility value.
+#     DEFAULT_COURSE_VISIBILITY_IN_CATALOG is not used for this on purpose: it would also change every existing
+#     course that never set the field.
+NEW_COURSE_CATALOG_VISIBILITY = None
+
 # Specify XBlocks that should be treated as advanced problems. Each entry is a
 # dict:
 #       'component': the entry-point name of the XBlock.

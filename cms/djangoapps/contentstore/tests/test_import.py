@@ -13,13 +13,17 @@ import ddt
 from django.conf import settings
 from django.test.client import Client
 from django.test.utils import override_settings
+from opaque_keys.edx.locator import LibraryLocator
 
+from openedx.core.lib.tempdir import mkdtemp_clean
 from xmodule.contentstore.django import contentstore
 from xmodule.exceptions import NotFoundError
 from xmodule.modulestore import ModuleStoreEnum
 from xmodule.modulestore.django import modulestore
 from xmodule.modulestore.tests.django_utils import ModuleStoreTestCase
-from xmodule.modulestore.xml_importer import import_course_from_xml
+from xmodule.modulestore.tests.factories import CourseFactory
+from xmodule.modulestore.xml_exporter import export_course_to_xml
+from xmodule.modulestore.xml_importer import CourseImportManager, import_course_from_xml, import_library_from_xml
 
 TEST_DATA_CONTENTSTORE = copy.deepcopy(settings.CONTENTSTORE)
 TEST_DATA_CONTENTSTORE['DOC_STORE_CONFIG']['db'] = 'test_xcontent_%s' % uuid4().hex
@@ -275,3 +279,63 @@ class ContentStoreImportTest(ModuleStoreTestCase):
 
         video = module_store.get_item(vertical.children[1])
         self.assertEqual(video.display_name, 'default')
+
+    def import_course_over(self, destination, source_catalog_visibility):
+        """
+        Export a new course that explicitly sets the given catalog_visibility, then import that export
+        over the destination course. Returns the destination's catalog_visibility on the draft and published branches.
+        """
+        source = CourseFactory.create(
+            default_store=ModuleStoreEnum.Type.split, catalog_visibility=source_catalog_visibility
+        )
+        export_dir = mkdtemp_clean()
+        export_course_to_xml(modulestore(), contentstore(), source.id, export_dir, 'source')
+        import_course_from_xml(
+            modulestore(), self.user.id, export_dir, ['source'],
+            static_content_store=contentstore(), target_id=destination.id, do_import_static=False,
+        )
+        catalog_visibility = {}
+        for branch in (ModuleStoreEnum.Branch.draft_preferred, ModuleStoreEnum.Branch.published_only):
+            with modulestore().branch_setting(branch, destination.id):
+                catalog_visibility[branch] = modulestore().get_course(destination.id).catalog_visibility
+        return catalog_visibility
+
+    @override_settings(NEW_COURSE_CATALOG_VISIBILITY='none')
+    def test_import_keeps_explicit_catalog_visibility(self):
+        """An import over a course that explicitly set catalog_visibility keeps it, on both branches"""
+        destination = CourseFactory.create(default_store=ModuleStoreEnum.Type.split, catalog_visibility='none')
+        self.assertEqual(
+            self.import_course_over(destination, 'about'),
+            {ModuleStoreEnum.Branch.draft_preferred: 'none', ModuleStoreEnum.Branch.published_only: 'none'},
+        )
+
+    @override_settings(NEW_COURSE_CATALOG_VISIBILITY='none')
+    def test_import_follows_import_when_catalog_visibility_never_set(self):
+        """An import over a course that never set catalog_visibility follows the imported course, as before"""
+        destination = CourseFactory.create(default_store=ModuleStoreEnum.Type.split)
+        self.assertEqual(
+            self.import_course_over(destination, 'about'),
+            {ModuleStoreEnum.Branch.draft_preferred: 'about', ModuleStoreEnum.Branch.published_only: 'about'},
+        )
+
+    def test_import_follows_import_without_catalog_visibility_setting(self):
+        """Without the setting an import overwrites even an explicit catalog_visibility, as before"""
+        destination = CourseFactory.create(default_store=ModuleStoreEnum.Type.split, catalog_visibility='none')
+        self.assertEqual(
+            self.import_course_over(destination, 'about'),
+            {ModuleStoreEnum.Branch.draft_preferred: 'about', ModuleStoreEnum.Branch.published_only: 'about'},
+        )
+
+    @override_settings(NEW_COURSE_CATALOG_VISIBILITY='none')
+    def test_library_import_ignores_catalog_visibility_setting(self):
+        """The catalog_visibility carry-over belongs to course imports only, a library import never reaches it"""
+        library_key = LibraryLocator(org='TestOrg', library='TestLib')
+        with patch.object(CourseImportManager, 'keep_explicit_catalog_visibility') as keep_catalog_visibility:
+            with modulestore().default_store(ModuleStoreEnum.Type.split):
+                library_items = import_library_from_xml(
+                    modulestore(), self.user.id, TEST_DATA_DIR, ['library_empty_problem'],
+                    static_content_store=contentstore(), target_id=library_key,
+                    load_error_blocks=False, raise_on_failure=True, create_if_not_present=True,
+                )
+        keep_catalog_visibility.assert_not_called()
+        self.assertEqual(library_items[0].location.library_key, library_key)

@@ -990,6 +990,10 @@ def create_new_course_in_store(store, user, org, number, run, fields):
         'cert_html_view_enabled': True,
     })
 
+    # Start the course with the configured catalog visibility, unless the caller chose one
+    if catalog_visibility := getattr(settings, 'NEW_COURSE_CATALOG_VISIBILITY', None):
+        fields.setdefault('catalog_visibility', catalog_visibility)
+
     with modulestore().default_store(store):
         # Creating the course raises DuplicateCourseError if an existing course with this org/name is found
         new_course = modulestore().create_course(

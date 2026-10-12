@@ -152,6 +152,13 @@ def rerun_course(source_course_key_string, destination_course_key_string, user_i
         with store.default_store('split'):
             store.clone_course(source_course_key, destination_course_key, user_id, fields=fields)
 
+            # clone_course leaves the rerun's published branch as the source's, so publish the catalog visibility
+            if catalog_visibility := getattr(settings, 'NEW_COURSE_CATALOG_VISIBILITY', None):
+                with store.branch_setting(ModuleStoreEnum.Branch.draft_preferred, destination_course_key):
+                    course = store.get_course(destination_course_key)
+                    course.catalog_visibility = catalog_visibility
+                    store.update_item(course, user_id)
+
         update_unit_discussion_state_from_discussion_blocks(destination_course_key, user_id)
 
         # set initial permissions for the user to access the course.

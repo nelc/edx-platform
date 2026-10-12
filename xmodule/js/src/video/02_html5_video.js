@@ -69,12 +69,9 @@
                         return [
                             '<source ',
                             'src="', source,
-                            // Following hack allows to open the same video twice
-                            // https://code.google.com/p/chromium/issues/detail?id=31014
-                            // Check whether the url already has a '?' inside, and if so,
-                            // use '&' instead of '?' to prevent breaking the url's integrity.
-                            (source.indexOf('?') === -1 ? '?' : '&'),
-                            (new Date()).getTime(), '" />'
+                            // NELC: no per-load cache-busting timestamp. A stable URL lets the
+                            // CDN cache /asset-v1 videos (the old Chromium bug 31014 hack is obsolete).
+                            '" />'
                         ].join('');
                     });
 

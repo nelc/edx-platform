@@ -30,6 +30,7 @@ from abc import abstractmethod
 from datetime import datetime, timezone
 
 import xblock
+from django.conf import settings
 from django.core.exceptions import ObjectDoesNotExist
 from django.utils.translation import gettext as _
 from lxml import etree
@@ -613,11 +614,25 @@ class CourseImportManager(ImportManager):
         from the temporary modulestore.
         """
         source_course = self.xml_module_store.get_course(courselike_key)
+        self.keep_explicit_catalog_visibility(source_course, dest_id)
         # STEP 1: find and import course block
         course, course_data_path = self.import_courselike(
             runtime, courselike_key, dest_id, source_course,
         )
         return source_course, course, course_data_path
+
+    def keep_explicit_catalog_visibility(self, source_course, dest_id):
+        """
+        The import rewrites the course settings from the imported course, so a catalog_visibility the destination
+        course had explicitly set (e.g. a hidden new course) would be lost. Carry it over to the imported course.
+        Only when NEW_COURSE_CATALOG_VISIBILITY is configured; a destination that never set it follows the import.
+        """
+        if not getattr(settings, 'NEW_COURSE_CATALOG_VISIBILITY', None):
+            return
+        with self.store.branch_setting(ModuleStoreEnum.Branch.draft_preferred, dest_id):
+            dest_course = self.store.get_course(dest_id)
+        if dest_course is not None and dest_course.fields['catalog_visibility'].is_set_on(dest_course):
+            source_course.catalog_visibility = dest_course.catalog_visibility
 
     def get_dest_id(self, courselike_key):
         """

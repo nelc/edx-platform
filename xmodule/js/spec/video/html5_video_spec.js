@@ -380,5 +380,28 @@
 
             expect($('video')).toHaveAttr('controls');
         });
+
+        it('uses stable video source URLs without cache-busting timestamps', function() {
+            var expectedSources = state.config.sources;
+
+            state.videoPlayer.player.videoEl.find('source').each(function(index) {
+                expect(this.getAttribute('src')).toBe(expectedSources[index]);
+            });
+        });
+
+        it('reuses the same source URLs when the player is reinitialized', function() {
+            var firstSources = state.videoPlayer.player.videoEl.find('source').map(function() {
+                return this.getAttribute('src');
+            }).get();
+
+            state.videoPlayer.destroy();
+            state = jasmine.initializePlayer('video_html5.html');
+
+            var secondSources = state.videoPlayer.player.videoEl.find('source').map(function() {
+                return this.getAttribute('src');
+            }).get();
+
+            expect(secondSources).toEqual(firstSources);
+        });
     });
 }).call(this);

@@ -2007,6 +2007,43 @@ class RerunCourseTest(ContentStoreTestCase):
 
         self.assertEqual(None, destination_course.advertised_start)
 
+    @override_settings(NEW_COURSE_CATALOG_VISIBILITY='none')
+    def test_rerun_course_catalog_visibility(self):
+        """A rerun gets the configured catalog visibility on both branches, and its source course is untouched"""
+        source_course = CourseFactory.create(catalog_visibility='both', default_store=ModuleStoreEnum.Type.split)
+        destination_course_key = self.post_rerun_request(source_course.id)
+        for branch in (ModuleStoreEnum.Branch.draft_preferred, ModuleStoreEnum.Branch.published_only):
+            self.assertEqual(_explicit_catalog_visibility(self.store, destination_course_key, branch), 'none')
+            self.assertEqual(_explicit_catalog_visibility(self.store, source_course.id, branch), 'both')
+
+    def test_rerun_course_catalog_visibility_unset(self):
+        """Without the setting a rerun is as before: its published branch is the source's until the first publish"""
+        source_course = CourseFactory.create(
+            catalog_visibility='about', display_name='Source', default_store=ModuleStoreEnum.Type.split
+        )
+        destination_course_key = self.post_rerun_request(source_course.id)
+        for branch in (ModuleStoreEnum.Branch.draft_preferred, ModuleStoreEnum.Branch.published_only):
+            self.assertEqual(_explicit_catalog_visibility(self.store, destination_course_key, branch), 'about')
+            self.assertEqual(_explicit_catalog_visibility(self.store, source_course.id, branch), 'about')
+        with self.store.branch_setting(ModuleStoreEnum.Branch.published_only, destination_course_key):
+            self.assertEqual(self.store.get_course(destination_course_key).display_name, 'Source')
+        self.assertEqual(self.store.get_course(destination_course_key).display_name, 'Robot Super Course')
+
+    @override_settings(NEW_COURSE_CATALOG_VISIBILITY='none')
+    def test_rerun_course_catalog_visibility_error(self):
+        """A failure while publishing the catalog visibility fails the rerun like any other rerun error"""
+        error_message = "Mock Error Message"
+        source_course = CourseFactory.create(default_store=ModuleStoreEnum.Type.split)
+        with mock.patch(
+                'xmodule.modulestore.mixed.MixedModuleStore.update_item',
+                mock.Mock(side_effect=Exception(error_message))
+        ):
+            destination_course_key = self.post_rerun_request(source_course.id)
+        rerun_state = CourseRerunState.objects.find_first(course_key=destination_course_key)
+        self.assertEqual(rerun_state.state, CourseRerunUIStateManager.State.FAILED)
+        self.assertIn(error_message, rerun_state.message)
+        self.assertIsNone(self.store.get_course(destination_course_key))
+
     def test_rerun_of_rerun(self):
         source_course = CourseFactory.create(default_store=ModuleStoreEnum.Type.split)
         rerun_course_key = self.post_rerun_request(source_course.id)

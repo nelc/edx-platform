@@ -66,9 +66,12 @@ class TestInstructorAPIEnrollmentEmailLocalization(SharedModuleStoreTestCase):
         assert expected_message in mail.outbox[0].body
 
     def test_enroll(self):
+        # NELC: enrollment e-mails follow the course language, then the learner's, then English, and
+        # only ar/en/fr have e-mail catalogues. This course has no language and Esperanto is not an
+        # e-mail language, so the enrollment e-mail is English (see get_course_email_language).
         self.update_enrollement("enroll", self.student.email)
 
-        self.check_outbox_is_esperanto()
+        self.check_outbox("You have been")
 
     def test_unenroll(self):
         CourseEnrollment.enroll(
@@ -91,8 +94,10 @@ class TestInstructorAPIEnrollmentEmailLocalization(SharedModuleStoreTestCase):
         self.check_outbox("You have been")
 
     @override_settings(LANGUAGE_CODE="eo")
-    def test_user_without_preference_receives_email_in_esperanto(self):
+    def test_user_without_preference_receives_enrollment_email_in_english(self):
+        # NELC: with no course language and no learner preference, enrollment e-mails end in English,
+        # not the platform language (see get_course_email_language).
         delete_user_preference(self.student, LANGUAGE_KEY)
         self.update_enrollement("enroll", self.student.email)
 
-        self.check_outbox_is_esperanto()
+        self.check_outbox("You have been")

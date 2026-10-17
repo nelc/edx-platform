@@ -530,6 +530,25 @@ def get_email_params(course, auto_enroll, secure=True, course_key=None, display_
     return email_params
 
 
+# Enrollment e-mails written in the language of the COURSE (NELC), not of whoever triggered them.
+COURSE_LANGUAGE_MESSAGE_TYPES = ('allowed_enroll', 'enrolled_enroll')
+COURSE_EMAIL_LANGUAGES = ('ar', 'en', 'fr')
+
+
+def get_course_email_language(course, recipient_language):
+    """
+    Language of an enrollment e-mail: the course language, then the recipient's saved one, then English.
+
+    Codes are reduced to their primary subtag ("fr_CA" -> "fr", "ar-SA" -> "ar"); a code with no
+    e-mail catalogue (not in COURSE_EMAIL_LANGUAGES) is skipped in favour of the next source.
+    """
+    for code in (getattr(course, 'language', None), recipient_language):
+        primary = (code or '').replace('_', '-').split('-')[0].lower()
+        if primary in COURSE_EMAIL_LANGUAGES:
+            return primary
+    return 'en'
+
+
 def send_mail_to_student(student, param_dict, language=None):
     """
     Construct the email using templates and then send it.
@@ -588,6 +607,9 @@ def send_mail_to_student(student, param_dict, language=None):
         'enrolled_unenroll': EnrolledUnenroll,
         'remove_beta_tester': RemoveBetaTester,
     }
+
+    if message_type in COURSE_LANGUAGE_MESSAGE_TYPES:
+        language = get_course_email_language(param_dict.get('course'), language)
 
     message_class = ace_emails_dict[message_type]
     message = message_class().personalize(

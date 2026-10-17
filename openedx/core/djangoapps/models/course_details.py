@@ -5,8 +5,11 @@ CourseDetails
 
 import logging
 import re
+from urllib.parse import parse_qs, urlsplit
 
 from django.conf import settings
+from django.core.exceptions import ValidationError
+from django.utils.translation import gettext as _
 
 from openedx.core.djangolib.markup import HTML
 from openedx.core.lib.courses import course_image_url
@@ -14,6 +17,53 @@ from xmodule.data import CertificatesDisplayBehaviors  # lint-amnesty, pylint: d
 from xmodule.fields import Date  # lint-amnesty, pylint: disable=wrong-import-order
 from xmodule.modulestore.django import modulestore  # lint-amnesty, pylint: disable=wrong-import-order
 from xmodule.modulestore.exceptions import ItemNotFoundError  # lint-amnesty, pylint: disable=wrong-import-order
+
+# NELC: the intro video must be a YouTube video ID. Authors paste links, and an unvalidated value produced
+# a broken embed (`embed/https://...`). `normalize_youtube_video_id` is the single rule for REST, legacy and
+# programmatic callers; the authoring MFE mirrors it client-side.
+YOUTUBE_VIDEO_ID_RE = re.compile(r'[A-Za-z0-9_-]{11}')
+_YOUTUBE_HOSTS = {'youtube.com', 'www.youtube.com', 'm.youtube.com', 'youtube-nocookie.com',
+                  'www.youtube-nocookie.com'}
+_YOUTUBE_PATH_PREFIXES = {'embed', 'shorts', 'live'}
+
+
+def normalize_youtube_video_id(value):
+    """
+    Return the 11-character YouTube video ID for a pasted ID or YouTube link, or None when blank.
+
+    Accepts a bare ID, `watch?v=ID`, `youtu.be/ID`, and `embed|shorts|live/ID` on youtube.com,
+    m.youtube.com and youtube-nocookie.com, with or without scheme. Other query parameters
+    (including a start time) are dropped. Raises ValidationError for anything else; never guesses.
+    """
+    if value is None or (isinstance(value, str) and not value.strip()):
+        return None
+    candidate = value.strip() if isinstance(value, str) else None
+    if candidate and YOUTUBE_VIDEO_ID_RE.fullmatch(candidate):
+        return candidate
+
+    video_id = None
+    if candidate:
+        try:
+            parts = urlsplit(candidate if '://' in candidate else '//' + candidate.lstrip('/'))
+            segments = [segment for segment in parts.path.split('/') if segment]
+            if parts.scheme in ('', 'http', 'https') and parts.hostname:
+                host = parts.hostname.lower()
+                if host == 'youtu.be' and segments:
+                    video_id = segments[0]
+                elif host in _YOUTUBE_HOSTS and segments == ['watch']:
+                    video_id = (parse_qs(parts.query).get('v') or [None])[0]
+                elif host in _YOUTUBE_HOSTS and len(segments) >= 2 and segments[0] in _YOUTUBE_PATH_PREFIXES:
+                    video_id = segments[1]
+        except ValueError:  # urlsplit rejects malformed input such as a bad IPv6 bracket
+            video_id = None
+
+    if not (video_id and YOUTUBE_VIDEO_ID_RE.fullmatch(video_id)):
+        raise ValidationError(_(
+            "Enter a YouTube video ID or a link to a YouTube video, for example "
+            "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
+        ))
+    return video_id
+
 
 # This list represents the attribute keys for a course's 'about' info.
 # Note: The 'video' attribute is intentionally excluded as it must be
@@ -188,6 +238,7 @@ class CourseDetails:
         """
         Updates the Course's about video to the given video ID.
         """
+        # NELC: raises ValidationError for anything that is not a YouTube ID or link.
         recomposed_video_tag = CourseDetails.recompose_video_tag(video_id)
         cls.update_about_item(course, 'video', recomposed_video_tag, user_id)
 
@@ -198,6 +249,9 @@ class CourseDetails:
         """
         module_store = modulestore()
         block = module_store.get_course(course_key)
+
+        # NELC: validate before any write, so a bad intro video leaves the course untouched.
+        intro_video_id = normalize_youtube_video_id(jsondict['intro_video'])
 
         dirty = False
 
@@ -313,7 +367,7 @@ class CourseDetails:
             if attribute in jsondict:
                 cls.update_about_item(block, attribute, jsondict[attribute], user.id)
 
-        cls.update_about_video(block, jsondict['intro_video'], user.id)
+        cls.update_about_video(block, intro_video_id, user.id)
 
         # Could just return jsondict w/o doing any db reads, but I put
         # the reads in as a means to confirm it persisted correctly
@@ -335,7 +389,9 @@ class CourseDetails:
         if keystring_matcher is None:
             keystring_matcher = re.search(r'<?=\d+:[a-zA-Z0-9_-]+', raw_video)
 
-        if keystring_matcher:
+        # NELC: a stored value that is not a valid ID (e.g. `embed/https://...` saved before validation existed)
+        # reads as empty, so the author is not locked out of saving by a value the validator would reject.
+        if keystring_matcher and YOUTUBE_VIDEO_ID_RE.fullmatch(keystring_matcher.group(0)):
             return keystring_matcher.group(0)
         else:
             logging.warn("ignoring the content because it doesn't not conform to expected pattern: " + raw_video)  # lint-amnesty, pylint: disable=deprecated-method, logging-not-lazy
@@ -350,6 +406,7 @@ class CourseDetails:
         # that this is a short-term workaround for the db not storing
         #  the right thing
         result = None
+        video_key = normalize_youtube_video_id(video_key)  # NELC: last guard for non-REST callers
         if video_key:
             result = (
                 HTML('<iframe title="YouTube Video" width="560" height="315" src="//www.youtube.com/embed/{}?rel=0" '

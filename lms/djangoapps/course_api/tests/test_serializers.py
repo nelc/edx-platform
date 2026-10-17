@@ -57,7 +57,7 @@ class TestCourseSerializer(CourseApiFactoryMixin, ModuleStoreTestCase):
                     'uri_absolute': banner_image_absolute_uri
                 },
                 'course_image': {'uri': image_path},
-                'course_video': {'uri': 'http://www.youtube.com/watch?v=test_youtube_id'},
+                'course_video': {'uri': 'http://www.youtube.com/watch?v=dQw4w9WgXcQ'},
                 'image': {
                     'raw': image_url,
                     'small': image_url,
@@ -100,7 +100,7 @@ class TestCourseSerializer(CourseApiFactoryMixin, ModuleStoreTestCase):
 
     def test_basic(self):
         course = self.create_course()
-        CourseDetails.update_about_video(course, 'test_youtube_id', self.staff_user.id)
+        CourseDetails.update_about_video(course, 'dQw4w9WgXcQ', self.staff_user.id)
         with check_mongo_calls(self.expected_mongo_calls):
             result = self._get_result(course)
         self.assertDictEqual(result, self.expected_data)
@@ -175,7 +175,7 @@ class TestCourseDetailSerializer(TestCourseSerializer):  # lint-amnesty, pylint:
         from CourseDetailSerializer serializer class.
         """
         course = self.create_course()
-        CourseDetails.update_about_video(course, 'test_youtube_id', self.staff_user.id)
+        CourseDetails.update_about_video(course, 'dQw4w9WgXcQ', self.staff_user.id)
         course_overview = CourseOverview.get_from_id(course.id)
         with check_mongo_calls(self.expected_mongo_calls):
             result = self._get_result(course)

@@ -10,14 +10,93 @@ import ddt
 from pytz import UTC
 
 from django.conf import settings
+from django.core.exceptions import ValidationError
+from django.test import SimpleTestCase
 from xmodule.modulestore import ModuleStoreEnum
 from xmodule.data import CertificatesDisplayBehaviors
 from xmodule.modulestore.tests.django_utils import TEST_DATA_SPLIT_MODULESTORE, ModuleStoreTestCase
 from xmodule.modulestore.tests.factories import CourseFactory
 
-from openedx.core.djangoapps.models.course_details import ABOUT_ATTRIBUTES, CourseDetails
+from openedx.core.djangoapps.models.course_details import ABOUT_ATTRIBUTES, CourseDetails, normalize_youtube_video_id
 
 EXAMPLE_CERTIFICATE_AVAILABLE_DATE = datetime.date(2020, 1, 1)
+VIDEO_ID = 'dQw4w9WgXcQ'
+
+
+@ddt.ddt
+class NormalizeYoutubeVideoIdTest(SimpleTestCase):
+    """
+    The single rule for the course intro video: a YouTube ID or link in, the 11-character ID out.
+    """
+
+    @ddt.data(
+        VIDEO_ID,
+        f'  {VIDEO_ID}\n',
+        f'https://www.youtube.com/watch?v={VIDEO_ID}',
+        f'https://www.youtube.com/watch?v={VIDEO_ID}&t=30s',
+        f'https://www.youtube.com/watch?feature=share&v={VIDEO_ID}',
+        f'youtube.com/watch?v={VIDEO_ID}',
+        f'http://youtube.com/watch?v={VIDEO_ID}',
+        f'https://m.youtube.com/watch?v={VIDEO_ID}',
+        f'https://youtu.be/{VIDEO_ID}',
+        f'youtu.be/{VIDEO_ID}?si=abcDEF123',
+        f'https://youtu.be/{VIDEO_ID}?t=5',
+        f'https://www.youtube.com/shorts/{VIDEO_ID}',
+        f'youtube.com/shorts/{VIDEO_ID}?feature=share',
+        f'https://www.youtube.com/embed/{VIDEO_ID}',
+        f'//www.youtube.com/embed/{VIDEO_ID}?rel=0&start=5',
+        f'https://www.youtube.com/live/{VIDEO_ID}?feature=share',
+        f'https://www.youtube-nocookie.com/embed/{VIDEO_ID}',
+        f'  https://WWW.YouTube.com/embed/{VIDEO_ID}/  ',
+    )
+    def test_accepted_forms(self, value):
+        assert normalize_youtube_video_id(value) == VIDEO_ID
+
+    @ddt.data(None, '', '   ', '\n')
+    def test_blank_means_no_video(self, value):
+        assert normalize_youtube_video_id(value) is None
+
+    @ddt.data(
+        'intro',
+        'abcdefghij',  # 10 characters
+        'abcdefghijkl',  # 12 characters
+        'abcdefghij!',
+        'abcdef hijk',
+        'not a video',
+        123456789012,
+        ['dQw4w9WgXcQ'],
+        'https://vimeo.com/123456789',
+        f'https://example.com/watch?v={VIDEO_ID}',
+        f'https://youtube.com.evil.example/watch?v={VIDEO_ID}',
+        f'https://evil.example/https://www.youtube.com/watch?v={VIDEO_ID}',
+        f'ftp://www.youtube.com/watch?v={VIDEO_ID}',
+        f'javascript:alert("{VIDEO_ID}")',
+        'https://www.youtube.com/watch',
+        'https://www.youtube.com/watch?v=short',
+        'https://www.youtube.com/watch?v=abcdefghijkl',
+        'https://www.youtube.com/',
+        'https://www.youtube.com/embed/',
+        'https://www.youtube.com/playlist?list=PL1234567890A',
+        f'https://www.youtube.com/user/{VIDEO_ID}',
+        'https://www.youtube.com/embed/https://www.youtube.com/watch?v=dQw4w9WgXcQ',
+        'https://[bad',
+    )
+    def test_rejected(self, value):
+        with pytest.raises(ValidationError):
+            normalize_youtube_video_id(value)
+
+    def test_recompose_video_tag_is_guarded(self):
+        assert f'/embed/{VIDEO_ID}?rel=0' in CourseDetails.recompose_video_tag(f'youtu.be/{VIDEO_ID}')
+        assert CourseDetails.recompose_video_tag(None) is None
+        with pytest.raises(ValidationError):
+            CourseDetails.recompose_video_tag('junk')
+
+    def test_parse_video_tag_reads_malformed_stored_value_as_empty(self):
+        stored_before_validation = (
+            '<iframe src="//www.youtube.com/embed/https://www.youtube.com/watch?v=dQw4w9WgXcQ?rel=0"></iframe>'
+        )
+        assert CourseDetails.parse_video_tag(stored_before_validation) is None
+        assert CourseDetails.parse_video_tag(CourseDetails.recompose_video_tag(VIDEO_ID)) == VIDEO_ID
 
 
 @ddt.ddt
@@ -153,12 +232,20 @@ class CourseDetailsTestCase(ModuleStoreTestCase):
             CourseDetails.fetch_about_attribute(self.course.id, attribute_name)
 
     def test_fetch_video(self):
-        video_value = 'test_video_id'
+        video_value = 'dQw4w9WgXcQ'
         with self.store.branch_setting(ModuleStoreEnum.Branch.draft_preferred, self.course.id):
             CourseDetails.update_about_video(self.course, video_value, self.user.id)
         assert CourseDetails.fetch_youtube_video_id(self.course.id) == video_value
         video_url = CourseDetails.fetch_video_url(self.course.id)
         self.assertRegex(video_url, fr'http://.*{video_value}')
+
+    def test_update_about_video_normalises_and_rejects(self):
+        with self.store.branch_setting(ModuleStoreEnum.Branch.draft_preferred, self.course.id):
+            CourseDetails.update_about_video(self.course, f'https://youtu.be/{VIDEO_ID}?si=x', self.user.id)
+            assert CourseDetails.fetch_youtube_video_id(self.course.id) == VIDEO_ID
+            with pytest.raises(ValidationError):
+                CourseDetails.update_about_video(self.course, 'junk', self.user.id)
+            assert CourseDetails.fetch_youtube_video_id(self.course.id) == VIDEO_ID
 
     @ddt.data(
         (

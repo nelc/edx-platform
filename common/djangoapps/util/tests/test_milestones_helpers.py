@@ -153,3 +153,22 @@ class MilestonesHelpersTestCase(ModuleStoreTestCase):
         milestones_helpers.add_course_milestone(str(course.id), 'requires', milestone)
         with pytest.raises(InvalidUserException):
             milestones_helpers.get_required_content(course.id, AnonymousUser())
+
+    @patch.dict(settings.FEATURES, {'ENABLE_PREREQUISITE_COURSES': True, 'MILESTONES_APP': True})
+    def test_prerequisite_courses_display_skips_deleted_course(self):
+        """
+        NELC: a prerequisite course that no longer exists is skipped (and logged) instead of
+        crashing the About page; the existing prerequisites are still listed.
+        """
+        existing = CourseFactory.create(org='edX', number='EXIST', run='2026')
+        missing_course_id = 'course-v1:edX+GONE+2026'
+        course = CourseFactory.create(
+            org='edX', number='MAIN', run='2026',
+            metadata={'pre_requisite_courses': [str(existing.id), missing_course_id]},
+        )
+
+        with self.assertLogs(milestones_helpers.log, level='ERROR') as logs:
+            result = milestones_helpers.get_prerequisite_courses_display(course)
+
+        assert [prc['key'] for prc in result] == [existing.id]
+        assert missing_course_id in logs.output[0]

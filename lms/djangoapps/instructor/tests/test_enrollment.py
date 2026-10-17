@@ -5,7 +5,7 @@ Unit tests for instructor.enrollment methods.
 
 import json
 from abc import ABCMeta
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 import ddt
 import pytest
@@ -36,6 +36,7 @@ from lms.djangoapps.instructor.enrollment import (
     render_message_to_string,
     reset_student_attempts,
     send_beta_role_email,
+    send_mail_to_student,
     unenroll_email
 )
 from lms.djangoapps.teams.models import CourseTeamMembership
@@ -1139,3 +1140,42 @@ class TestRenderMessageToString(EmailTemplateTagMixin, SharedModuleStoreTestCase
         subject, message = self.get_subject_and_message_ccx(subject_template, body_template)
         assert self.ccx.display_name in subject
         assert self.ccx.display_name in message
+
+
+@ddt.ddt
+class TestEnrollmentEmailLanguage(CacheIsolationTestCase):
+    """
+    Enrollment invitations and confirmations use the course language, then the recipient's, then English.
+    """
+
+    def _sent_language(self, message_type, course_language, recipient_language):
+        """Send through send_mail_to_student and return the language ACE was asked to render in."""
+        param_dict = {
+            'message_type': message_type,
+            'site_name': 'example.com',
+            'course': Mock(language=course_language, display_name_with_default='Course'),
+        }
+        with patch('lms.djangoapps.instructor.enrollment.ace') as ace_mock, \
+                patch('lms.djangoapps.instructor.enrollment.get_current_request', return_value=object()):
+            send_mail_to_student('learner@example.com', param_dict, language=recipient_language)
+        return ace_mock.send.call_args[0][0].language
+
+    @ddt.data(
+        ('ar', 'en', 'ar'),
+        ('en', 'ar', 'en'),
+        ('fr_CA', None, 'fr'),
+        ('ar-SA', 'fr', 'ar'),
+        (None, 'fr', 'fr'),
+        ('', 'ar', 'ar'),
+        ('ur', 'ar', 'ar'),
+        ('ur', 'xx', 'en'),
+        (None, None, 'en'),
+    )
+    @ddt.unpack
+    def test_course_then_recipient_then_english(self, course_language, recipient_language, expected):
+        for message_type in ('allowed_enroll', 'enrolled_enroll'):
+            assert self._sent_language(message_type, course_language, recipient_language) == expected
+
+    def test_other_message_types_keep_the_caller_language(self):
+        assert self._sent_language('enrolled_unenroll', 'ar', 'fr') == 'fr'
+        assert self._sent_language('enrolled_unenroll', 'ar', None) is None

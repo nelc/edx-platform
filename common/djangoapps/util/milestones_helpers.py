@@ -1,6 +1,8 @@
 """
 Utility library for working with the edx-milestones app
 """
+import logging
+
 from django.conf import settings
 from django.utils.translation import gettext as _
 from edx_toggles.toggles import SettingDictToggle
@@ -14,6 +16,8 @@ from opaque_keys.edx.keys import CourseKey
 from openedx.core.djangoapps.content.course_overviews.models import CourseOverview
 from openedx.core.lib.cache_utils import get_cache
 from xmodule.modulestore.django import modulestore  # lint-amnesty, pylint: disable=wrong-import-order
+
+log = logging.getLogger(__name__)
 
 
 NAMESPACE_CHOICES = {
@@ -161,6 +165,10 @@ def get_prerequisite_courses_display(course_block):
         for course_id in course_block.pre_requisite_courses:
             course_key = CourseKey.from_string(course_id)
             required_course_block = modulestore().get_course(course_key)
+            if required_course_block is None:
+                # NELC: a deleted prerequisite course must not crash the About page; skip it, but say so.
+                log.error("Prerequisite course %s of course %s does not exist; skipped.", course_key, course_block.id)
+                continue
             prc = {
                 'key': course_key,
                 'display': get_course_display_string(required_course_block)

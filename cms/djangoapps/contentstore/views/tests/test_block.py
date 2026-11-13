@@ -3008,7 +3008,8 @@ class TestComponentTemplates(CourseTestCase):
         from ..component import _vclassroom_tile  # pylint: disable=import-outside-toplevel
         tile = Mock(BLOCK_TYPE="vclassroom")
         tile.label.return_value = "Virtual Classroom"
-        with patch.dict("sys.modules", {"vclassroom_providers": Mock(studio_tile=tile), "vclassroom_providers.studio_tile": tile}):
+        modules = {"vclassroom_providers": Mock(studio_tile=tile), "vclassroom_providers.studio_tile": tile}
+        with patch.dict("sys.modules", modules):
             tile.offered.return_value = True
             self.assertEqual(_vclassroom_tile(self.course), ("vclassroom", "Virtual Classroom"))
             tile.offered.assert_called_with(self.course.location.org)

@@ -93,6 +93,27 @@ DEFAULT_ADVANCED_MODULES = [
 ]
 
 
+def _vclassroom_tile(courselike):
+    """
+    NELC: the virtual classroom plugin (xblock-vclassroom-providers) decides whether a course's organisation is
+    offered the block as its own "add a component" button, and what the button is called.
+
+    Returns:
+        (block type, button label) when it is offered; None when the plugin is not installed or says no.
+        A failing plugin never breaks the unit page: it is logged and the button is not shown.
+    """
+    try:
+        from vclassroom_providers import studio_tile  # pylint: disable=import-outside-toplevel
+    except ImportError:
+        return None
+    try:
+        if studio_tile.offered(courselike.location.org):
+            return studio_tile.BLOCK_TYPE, studio_tile.label()
+    except Exception:  # pylint: disable=broad-except
+        log.exception("Virtual classroom tile check failed for %s", courselike.location)
+    return None
+
+
 def _advanced_component_types(show_unsupported):
     """
     Return advanced component types which can be created.
@@ -450,6 +471,22 @@ def get_component_templates(courselike, library=False):  # lint-amnesty, pylint:
     # Libraries do not support advanced components at this time.
     if library:
         return component_templates
+
+    # NELC: the virtual classroom as its own button, with no advanced-module setting, for an organisation that
+    # can run a session. Adding it to `categories` keeps it out of the "Advanced" list of a course that lists it.
+    vclassroom_tile = _vclassroom_tile(courselike)
+    if vclassroom_tile:
+        tile_type, tile_label = vclassroom_tile
+        tile_support_level = _advanced_component_types(allow_unsupported).get(tile_type)
+        if tile_support_level:
+            component_templates.append({
+                "type": tile_type,
+                "templates": [create_template_dict(tile_label, tile_type, tile_support_level)],
+                "display_name": tile_label,
+                "support_legend": create_support_legend_dict(),
+                "beta": False,
+            })
+            categories.add(tile_type)
 
     # Check if there are any advanced modules specified in the course policy.
     # These modules should be specified as a list of strings, where the strings

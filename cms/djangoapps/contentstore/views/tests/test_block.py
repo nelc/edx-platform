@@ -2983,6 +2983,40 @@ class TestComponentTemplates(CourseTestCase):
         self.templates = get_component_templates(self.course)
         self.assertIsNone(self.get_templates_of_type("video"))
 
+    def test_vclassroom_tile_absent_without_the_plugin(self):
+        """
+        NELC: without the virtual classroom plugin there is no extra button.
+        """
+        self.assertIsNone(self.get_templates_of_type("vclassroom"))
+
+    def test_vclassroom_tile_is_its_own_button_and_leaves_advanced(self):
+        """
+        NELC: an offered block is its own button and is no longer listed under "Advanced".
+        `poll` (installed, a default advanced module) stands in for the plugin's block type.
+        """
+        with patch("cms.djangoapps.contentstore.views.component._vclassroom_tile", return_value=("poll", "Tile name")):
+            self.templates = get_component_templates(self.course)
+        self._verify_basic_component("poll", "Tile name")
+        self._verify_basic_component_display_name("poll", "Tile name")
+        advanced_module_keys = [t["category"] for t in self.get_templates_of_type("advanced")]
+        self.assertCountEqual(advanced_module_keys, [m for m in DEFAULT_ADVANCED_MODULES if m != "poll"])
+
+    def test_vclassroom_tile_follows_the_plugin_and_survives_its_failure(self):
+        """
+        NELC: the plugin decides per organisation; a plugin error means no button, never a broken page.
+        """
+        from ..component import _vclassroom_tile  # pylint: disable=import-outside-toplevel
+        tile = Mock(BLOCK_TYPE="vclassroom")
+        tile.label.return_value = "Virtual Classroom"
+        with patch.dict("sys.modules", {"vclassroom_providers": Mock(studio_tile=tile), "vclassroom_providers.studio_tile": tile}):
+            tile.offered.return_value = True
+            self.assertEqual(_vclassroom_tile(self.course), ("vclassroom", "Virtual Classroom"))
+            tile.offered.assert_called_with(self.course.location.org)
+            tile.offered.return_value = False
+            self.assertIsNone(_vclassroom_tile(self.course))
+            tile.offered.side_effect = RuntimeError("boom")
+            self.assertIsNone(_vclassroom_tile(self.course))
+
     def test_basic_components_support_levels(self):
         """
         Test that support levels can be set on basic component templates.
